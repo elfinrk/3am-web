@@ -1,7 +1,7 @@
 "use server";
 
 import { connectDB } from "@/lib/db";
-import { Menu } from "@/models/menu.model";
+import Menu from "@/models/menu.model";
 import { revalidatePath } from "next/cache";
 
 // PUBLIC (/menu)
