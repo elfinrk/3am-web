@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import Link from "next/link"; // Import Link untuk navigasi
+import Link from "next/link"; 
 import { Facebook, Instagram, Twitter, ArrowRight } from "lucide-react"; 
 
 // --- Data Dummy ---
@@ -29,20 +29,18 @@ const feedbacks = [
   { quote: "Tempatnya cozy abis, enak buat nongkrong.", name: "Natan Pratama", role: "Mahasiswa", avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=100" },
 ];
 
-// --- Konfigurasi Link Navigasi ---
 const navLinks = [
   { name: "Home", href: "/" },
   { name: "Full Menu", href: "/menu" },
-  { name: "Our Story", href: "/story" }, // Pindah ke halaman Story
-  { name: "3.AM Merch", href: "/merch" }, // Pindah ke halaman Merch
-  { name: "Donate", href: "/donate" },   // Pindah ke halaman Donate
+  { name: "Our Story", href: "/story" },
+  { name: "3.AM Merch", href: "/merch" },
+  { name: "Donate", href: "/donate" },
 ];
 
 export default function LandingPage() {
   return (
     <div className="w-full bg-paper overflow-x-hidden font-body text-[#1A1A1A]">
       
-      {/* GLOBAL STYLES UNTUK ANIMASI */}
       <style jsx global>{`
         @keyframes float {
           0%, 100% { transform: translateY(0px); }
@@ -58,35 +56,44 @@ export default function LandingPage() {
         .animate-glow {
           animation: pulse-glow 4s ease-in-out infinite;
         }
+        /* Hide scrollbar for Chrome, Safari and Opera */
+        .no-scrollbar::-webkit-scrollbar {
+          display: none;
+        }
+        /* Hide scrollbar for IE, Edge and Firefox */
+        .no-scrollbar {
+          -ms-overflow-style: none;  /* IE and Edge */
+          scrollbar-width: none;  /* Firefox */
+        }
       `}</style>
 
       {/* ================= 1. NAVBAR ================= */}
       <header className="sticky top-0 z-50 w-full bg-[#F3EDE2]/95 backdrop-blur-sm border-b border-[#E5DCC5]">
-        <div className="container mx-auto px-6 h-20 md:h-24 flex items-center justify-between">
-          <Link href="/" className="flex items-center">
-            <Image src="/Logo.png" alt="3AM Logo" width={100} height={100} className="w-20 h-20 md:w-24 md:h-24 object-contain" />
+        <div className="container mx-auto px-4 h-20 md:h-24 flex items-center justify-between gap-2">
+          <Link href="/" className="flex items-center shrink-0">
+            <Image src="/Logo.png" alt="3AM Logo" width={100} height={100} className="w-14 h-14 md:w-24 md:h-24 object-contain" />
           </Link>
           
-          {/* NAVIGASI: Semua item menggunakan Link */}
-          <nav className="hidden md:flex items-center gap-2 text-sm md:text-base font-medium text-[#52392C]">
+          {/* NAVIGASI: Muncul di HP dengan scroll horizontal jika terlalu lebar */}
+          <nav className="flex items-center gap-1 md:gap-2 text-[10px] md:text-base font-medium text-[#52392C] overflow-x-auto no-scrollbar whitespace-nowrap px-2">
             {navLinks.map((item) => (
               <Link 
                 key={item.name} 
                 href={item.href} 
-                className="px-4 py-2 rounded-lg transition-all duration-300 hover:bg-[#361509] hover:text-white relative group"
+                className="px-2 md:px-4 py-2 rounded-lg transition-all duration-300 hover:bg-[#361509] hover:text-white relative group"
               >
                 {item.name}
               </Link>
             ))}
           </nav>
 
-          <div className="flex items-center gap-3 md:gap-4">
-            {/* Tombol Order Online -> Ke Menu */}
-            <Link href="/online" className="hidden md:block px-6 py-2.5 bg-[#361509] text-white text-sm font-bold rounded-lg hover:bg-[#2a1007] transition shadow-md text-center">
+          <div className="flex items-center gap-1.5 md:gap-4 shrink-0">
+            {/* Tombol Order Online: Muncul di HP */}
+            <Link href="/online" className="px-3 md:px-6 py-2 bg-[#361509] text-white text-[10px] md:text-sm font-bold rounded-lg hover:bg-[#2a1007] transition shadow-md text-center whitespace-nowrap">
               Order Online
             </Link>
-            {/* Tombol Reservation -> Ke Halaman Reservation */}
-            <Link href="/reservation" className="hidden md:block px-6 py-2.5 bg-transparent text-[#52392C] border-2 border-[#52392C] text-sm font-bold rounded-full hover:bg-[#52392C] hover:text-white transition text-center">
+            {/* Tombol Reservation: Muncul di HP */}
+            <Link href="/reservation" className="px-3 md:px-6 py-2 bg-transparent text-[#52392C] border border-[#52392C] text-[10px] md:text-sm font-bold rounded-full hover:bg-[#52392C] hover:text-white transition text-center whitespace-nowrap">
               Reservation
             </Link>
           </div>
@@ -105,9 +112,8 @@ export default function LandingPage() {
             <h1 className="font-display font-bold text-5xl md:text-7xl text-[#2B1F18] leading-tight mb-8 tracking-tight drop-shadow-sm">
               FOR THE <br/>SLEEPLESS<br /><span className="text-[#6F4E37] italic">AND DREAMERS</span>
             </h1>
-            {/* Tombol Order Ahead -> Ke Menu */}
             <Link href="/menu" className="px-8 py-3.5 bg-[#361509] text-white text-base md:text-lg font-bold rounded-lg hover:bg-[#2a1007] transition-all shadow-xl hover:-translate-y-1 flex items-center gap-2 group">
-               Order Ahead <ArrowRight className="group-hover:translate-x-1 transition-transform"/>
+                Order Ahead <ArrowRight className="group-hover:translate-x-1 transition-transform"/>
             </Link>
           </div>
           <div className="w-full md:w-1/2 flex justify-center md:justify-center relative mt-12 md:mt-0 z-30 md:-ml-16">
@@ -139,7 +145,6 @@ export default function LandingPage() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
             {signatureDrinks.map((drink, idx) => (
               <Link href="/menu" key={idx} className="group relative h-[480px] w-full rounded-[2.5rem] overflow-hidden shadow-2xl bg-[#F6E6D0] block">
-                {/* Layer Gambar */}
                 <div className="absolute inset-0 flex items-center justify-center p-6 transition-all duration-700 group-hover:scale-90 group-hover:opacity-40">
                    <div className="relative w-full h-full">
                      <Image 
@@ -150,7 +155,6 @@ export default function LandingPage() {
                      />
                    </div>
                 </div>
-                {/* Layer Overlay */}
                 <div className="absolute inset-0 bg-[#2E1C16]/85 backdrop-blur-[4px] opacity-0 group-hover:opacity-100 transition-all duration-500 flex flex-col items-center justify-center p-8 text-center z-20">
                    <h3 className="font-display font-bold text-3xl text-white drop-shadow-md mb-4 translate-y-6 group-hover:translate-y-0 transition-all duration-500 delay-100">{drink.name}</h3>
                    <p className="text-white/95 text-lg leading-relaxed font-medium mb-2 translate-y-6 group-hover:translate-y-0 transition-all duration-500 delay-200 line-clamp-4 drop-shadow-sm">{drink.desc}</p>
@@ -176,7 +180,6 @@ export default function LandingPage() {
               A comforting late-night treat made with crisp artisan bread and a smooth layer of slow-melted cheese. Finished with a gentle touch of garlic butter, it delivers a warm, velvety richness perfect on its own or paired with your favorite brew.
             </p>
             <div className="pt-8">
-              {/* TOMBOL ORDER NOW -> PINDAH KE MENU */}
               <Link href="/menu" className="inline-block px-10 py-5 bg-[#361509] text-white font-bold text-xl rounded-2xl hover:bg-[#2c1b18] transition-all shadow-md hover:shadow-xl hover:-translate-y-1">
                 Rp25.000 | Order Now →
               </Link>
@@ -184,9 +187,7 @@ export default function LandingPage() {
           </div>
           <div className="w-full md:w-1/2 flex justify-center items-center mt-16 md:mt-0">
              <div className="relative w-[400px] h-[400px] md:w-[600px] md:h-[600px] lg:w-[700px] lg:h-[700px] group perspective-1000">
-               {/* Efek Cahaya Belakang */}
                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[80%] h-[80%] bg-[#E5DCC5] rounded-full blur-[60px] opacity-60 animate-glow z-0"></div>
-               {/* Gambar dengan Animasi */}
                <div className="relative w-full h-full animate-float z-10 transition-transform duration-700 ease-in-out hover:rotate-2 hover:scale-105">
                  <Image src="/cheese.png" alt="3AM Cheesemelt Toast" fill className="object-contain drop-shadow-2xl" />
                </div>
@@ -217,7 +218,6 @@ export default function LandingPage() {
               "hey, take your time here."
             </p>
             
-            {/* TOMBOL READ OUR STORY -> PINDAH KE HALAMAN STORY */}
             <Link href="/story" className="inline-block px-10 py-4 bg-[#F3EDE2] text-[#3F2C22] font-bold text-lg rounded-xl hover:bg-white transition shadow-lg hover:-translate-y-1">
               Read Our Story →
             </Link>
