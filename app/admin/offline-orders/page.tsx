@@ -17,12 +17,14 @@ interface CartItem {
 }
 
 export default function OfflineOrdersPage() {
+  // Mengambil data produk & fungsi refreshData dari Context baru
   const { products, refreshData } = useAdmin(); 
+  
   const [cart, setCart] = useState<CartItem[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [activeCategory, setActiveCategory] = useState("all");
   const [paymentMethod, setPaymentMethod] = useState<"Tunai" | "QRIS">("Tunai");
-  const [isSubmitting, setIsSubmitting] = useState(false); // Loading state
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const categories = [
     { id: "all", name: "All Menu" },
@@ -34,7 +36,9 @@ export default function OfflineOrdersPage() {
   ];
 
   const filteredProducts = products?.filter(p => {
-    const matchSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase());
+    // Handling aman jika p.name undefined
+    const name = p.name || "";
+    const matchSearch = name.toLowerCase().includes(searchTerm.toLowerCase());
     const matchCategory = activeCategory === "all" || p.category === activeCategory;
     return matchSearch && matchCategory;
   }) || [];
@@ -47,7 +51,7 @@ export default function OfflineOrdersPage() {
     }
 
     setCart((prev) => {
-      // Pastikan menggunakan _id dari MongoDB
+      // Pastikan menggunakan _id dari MongoDB atau fallback ke id
       const productId = product._id || product.id; 
       
       const existing = prev.find((item) => item.id === productId);
@@ -68,7 +72,8 @@ export default function OfflineOrdersPage() {
 
   const updateQuantity = (id: string, delta: number) => {
     // Cari data asli produk untuk cek stok limit
-    const originalProduct = products.find(p => (p._id || p.id) === id);
+    // Cast id ke string untuk perbandingan aman
+    const originalProduct = products.find(p => String(p._id || p.id) === String(id));
 
     setCart((prev) =>
       prev.map((item) => {
@@ -93,30 +98,31 @@ export default function OfflineOrdersPage() {
   const tax = subtotal * 0.1; // Pajak 10%
   const total = subtotal + tax;
 
-  // --- FUNGSI KIRIM KE DATABASE (PENTING!) ---
+  // --- FUNGSI KIRIM KE DATABASE ---
   const handleProcessTransaction = async () => {
     if (cart.length === 0) return;
     setIsSubmitting(true);
 
     try {
-        // 1. Format Item Cart untuk dikirim (Format: { "ID_PRODUK": JUMLAH })
-        // Ini digunakan backend untuk memotong stok secara otomatis
+        // 1. Format Item Cart untuk backend
         const cartItemsForBackend: { [key: string]: number } = {};
         cart.forEach(item => {
             cartItemsForBackend[item.id] = item.quantity;
         });
 
         // 2. Siapkan Data Order
+        // Tambahkan ID manual "OFF-..." agar konsisten dengan sistem baru
         const orderData = {
-            customer: "Walk-in Customer", // Nama default kasir
+            id: `OFF-${Date.now().toString().slice(-6)}`, 
+            customer: "Walk-in Customer",
             phone: "-",
             address: "Dine-in (Offline)",
-            items: cart.map(i => `${i.name} (${i.quantity}x)`).join(", "), // String ringkasan menu
-            total: total, // Total uang yang masuk ke Dashboard
+            items: cart.map(i => `${i.name} (${i.quantity}x)`).join(", "),
+            total: total, 
             type: "Offline",
-            status: "Selesai", // WAJIB "Selesai" agar masuk hitungan Profit/Revenue
+            status: "Selesai", // WAJIB "Selesai" agar masuk Dashboard
             paymentMethod: paymentMethod,
-            cartItems: cartItemsForBackend // Data untuk potong stok
+            cartItems: cartItemsForBackend 
         };
 
         // 3. Kirim ke API
@@ -127,9 +133,13 @@ export default function OfflineOrdersPage() {
         });
 
         if (res.ok) {
+            // Update Dashboard Global secara Instan!
+            if (refreshData) {
+               await refreshData(); 
+            }
+
             alert(`✅ Transaksi Berhasil!\nTotal Masuk: Rp ${total.toLocaleString('id-ID')}`);
-            setCart([]); // Kosongkan keranjang
-            if (refreshData) refreshData(); // Update data di Dashboard Admin secara instan
+            setCart([]); 
         } else {
             alert("❌ Gagal menyimpan transaksi ke database.");
         }
