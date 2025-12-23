@@ -32,8 +32,9 @@ interface AdminContextType {
   donationBalance: number;
   isLoading: boolean;
   
-  // Definisi Fungsi
+  // Definisi Fungsi refreshData WAJIB ADA DISINI
   refreshData: () => Promise<void>; 
+  
   updateProduct: (id: number | string, newData: { price?: number; stock?: number }) => void;
 }
 
@@ -43,9 +44,8 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
   const [products, setProducts] = useState<Product[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   
-  // --- PERBAIKAN DISINI ---
-  // Sebelumnya: useState([]) -> Error "never[]"
-  // Sekarang: useState<any[]>([]) -> AMAN ✅
+  // --- PERBAIKAN UTAMA DISINI ---
+  // Kita tambahkan <any[]> agar TypeScript tahu ini boleh diisi data apa saja
   const [reservations, setReservations] = useState<any[]>([]); 
   
   const [donationBalance, setDonationBalance] = useState(0);
@@ -68,7 +68,7 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
 
       const resReservasi = await fetch("/api/reservations");
       const dataReservasi = await resReservasi.json();
-      // Sekarang baris ini aman karena tipe datanya sudah any[]
+      // Sekarang aman karena tipe datanya sudah any[]
       if (Array.isArray(dataReservasi)) setReservations(dataReservasi);
 
     } catch (err) {
@@ -125,7 +125,7 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
         reservations,
         donationBalance,
         isLoading,
-        refreshData, 
+        refreshData, // <--- WAJIB DI-EXPORT DISINI
         updateProduct
       }}
     >
