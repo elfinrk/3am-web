@@ -9,7 +9,7 @@ import {
 import Image from "next/image";
 
 interface CartItem {
-  id: string; // Menggunakan string karena MongoDB ID bentuknya string
+  id: string; 
   name: string;
   price: number;
   quantity: number;
@@ -17,9 +17,8 @@ interface CartItem {
 }
 
 export default function OfflineOrdersPage() {
-  // --- PERBAIKAN UTAMA DISINI ---
-  // Kita tambahkan 'as any' agar TypeScript tidak mengecek tipe data secara ketat
-  // Ini menjamin build Vercel akan SUKSES.
+  // --- FIX VERCEL DEPLOYMENT: BYPASS TYPE CHECK ---
+  // Kita pakai 'as any' supaya Vercel lolos build 100%
   const { products, refreshData } = useAdmin() as any; 
   
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -52,13 +51,11 @@ export default function OfflineOrdersPage() {
     }
 
     setCart((prev) => {
-      // Pastikan menggunakan _id dari MongoDB atau fallback ke id
       const productId = product._id || product.id; 
       
       const existing = prev.find((item) => item.id === productId);
       
       if (existing) {
-        // Cek apakah stok cukup sebelum menambah
         if (existing.quantity >= product.stock) {
             alert("Stok tidak mencukupi!");
             return prev;
@@ -79,7 +76,6 @@ export default function OfflineOrdersPage() {
         if (item.id === id) {
             const newQty = item.quantity + delta;
             
-            // Validasi Stok
             if (delta > 0 && originalProduct && newQty > originalProduct.stock) {
                 alert("Maksimal stok tercapai!");
                 return item;
@@ -94,7 +90,7 @@ export default function OfflineOrdersPage() {
 
   // --- PERHITUNGAN UANG ---
   const subtotal = cart.reduce((acc, item) => acc + item.price * item.quantity, 0);
-  const tax = subtotal * 0.1; // Pajak 10%
+  const tax = subtotal * 0.1; 
   const total = subtotal + tax;
 
   // --- FUNGSI KIRIM KE DATABASE ---
@@ -103,13 +99,11 @@ export default function OfflineOrdersPage() {
     setIsSubmitting(true);
 
     try {
-        // 1. Format Item Cart untuk backend
         const cartItemsForBackend: { [key: string]: number } = {};
         cart.forEach(item => {
             cartItemsForBackend[item.id] = item.quantity;
         });
 
-        // 2. Siapkan Data Order
         const orderData = {
             id: `OFF-${Date.now().toString().slice(-6)}`, 
             customer: "Walk-in Customer",
@@ -118,12 +112,11 @@ export default function OfflineOrdersPage() {
             items: cart.map(i => `${i.name} (${i.quantity}x)`).join(", "),
             total: total, 
             type: "Offline",
-            status: "Selesai", // WAJIB "Selesai" agar masuk Dashboard
+            status: "Selesai",
             paymentMethod: paymentMethod,
             cartItems: cartItemsForBackend 
         };
 
-        // 3. Kirim ke API
         const res = await fetch("/api/orders", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -131,7 +124,6 @@ export default function OfflineOrdersPage() {
         });
 
         if (res.ok) {
-            // Update Dashboard Global secara Instan (Jika fungsi ada)
             if (refreshData) {
                await refreshData(); 
             }
@@ -151,8 +143,7 @@ export default function OfflineOrdersPage() {
 
   return (
     <div className="flex flex-col lg:flex-row gap-6 h-[calc(100vh-140px)] overflow-hidden">
-      
-      {/* --- BAGIAN KIRI: GRID MENU --- */}
+      {/* Bagian Kiri */}
       <div className="flex-1 flex flex-col gap-4 overflow-hidden">
         <div className="flex flex-col gap-4">
           <h1 className="text-3xl font-display font-bold text-[#3E2723]">Input Pesanan Kasir</h1>
@@ -206,10 +197,8 @@ export default function OfflineOrdersPage() {
         </div>
       </div>
 
-      {/* --- BAGIAN KANAN: KERANJANG KASIR --- */}
+      {/* Bagian Kanan */}
       <div className="w-full lg:w-[380px] bg-white rounded-[2.5rem] border border-[#E5DCC5] flex flex-col shadow-2xl overflow-hidden">
-        
-        {/* Header Keranjang */}
         <div className="p-5 bg-[#3E2723] text-white flex justify-between items-center">
           <div className="flex items-center gap-2 font-display font-bold tracking-widest uppercase text-[12px]">
             <ShoppingBag size={18} />
@@ -218,7 +207,6 @@ export default function OfflineOrdersPage() {
           <button onClick={() => setCart([])} className="text-[9px] font-black opacity-50 hover:opacity-100 uppercase">CLEAR ALL</button>
         </div>
 
-        {/* List Item */}
         <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-gray-50/30 custom-scrollbar">
           {cart.map((item) => (
             <div key={item.id} className="bg-white p-3 rounded-[1.5rem] border border-[#E5DCC5]/40 flex gap-3 shadow-sm transition-all">
@@ -247,7 +235,6 @@ export default function OfflineOrdersPage() {
           )}
         </div>
 
-        {/* Ringkasan & Tombol Bayar */}
         <div className="p-6 bg-white border-t border-[#E5DCC5] space-y-4">
           <div className="space-y-2">
             <div className="flex justify-between text-[10px] font-black text-gray-400 uppercase tracking-widest">
@@ -265,50 +252,22 @@ export default function OfflineOrdersPage() {
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            <button 
-              onClick={() => setPaymentMethod("Tunai")}
-              className={`flex flex-col items-center justify-center gap-1.5 p-4 rounded-[1.5rem] border-2 transition-all ${
-                paymentMethod === "Tunai" 
-                  ? "bg-white border-[#3E2723] shadow-md ring-2 ring-[#3E2723]/5" 
-                  : "bg-transparent border-gray-100 text-gray-200 opacity-40"
-              }`}
-            >
+            <button onClick={() => setPaymentMethod("Tunai")} className={`flex flex-col items-center justify-center gap-1.5 p-4 rounded-[1.5rem] border-2 transition-all ${paymentMethod === "Tunai" ? "bg-white border-[#3E2723] shadow-md ring-2 ring-[#3E2723]/5" : "bg-transparent border-gray-100 text-gray-200 opacity-40"}`}>
               <Wallet size={20} className={paymentMethod === "Tunai" ? "text-[#3E2723]" : "text-gray-200"} />
               <span className="text-[9px] font-black uppercase tracking-widest">TUNAI</span>
             </button>
-
-            <button 
-              onClick={() => setPaymentMethod("QRIS")}
-              className={`flex flex-col items-center justify-center gap-1.5 p-4 rounded-[1.5rem] border-2 transition-all ${
-                paymentMethod === "QRIS" 
-                  ? "bg-white border-[#3E2723] shadow-md ring-2 ring-[#3E2723]/5" 
-                  : "bg-transparent border-gray-100 text-gray-200 opacity-40"
-              }`}
-            >
+            <button onClick={() => setPaymentMethod("QRIS")} className={`flex flex-col items-center justify-center gap-1.5 p-4 rounded-[1.5rem] border-2 transition-all ${paymentMethod === "QRIS" ? "bg-white border-[#3E2723] shadow-md ring-2 ring-[#3E2723]/5" : "bg-transparent border-gray-100 text-gray-200 opacity-40"}`}>
               <CreditCard size={20} className={paymentMethod === "QRIS" ? "text-[#3E2723]" : "text-gray-200"} />
               <span className="text-[9px] font-black uppercase tracking-widest">QRIS/KARTU</span>
             </button>
           </div>
 
-          <button 
-            disabled={cart.length === 0 || isSubmitting}
-            onClick={handleProcessTransaction}
-            className="w-full py-4 bg-[#3E2723] text-white rounded-[1.5rem] font-black uppercase tracking-[0.2em] text-[12px] shadow-xl hover:bg-[#5D4037] active:scale-95 transition-all flex items-center justify-center gap-3 disabled:opacity-50"
-          >
-            {isSubmitting ? (
-                <>
-                    <Loader2 size={16} className="animate-spin" /> MEMPROSES...
-                </>
-            ) : (
-                <>
-                    SELESAIKAN TRANSAKSI <CheckCircle2 size={16} />
-                </>
-            )}
+          <button disabled={cart.length === 0 || isSubmitting} onClick={handleProcessTransaction} className="w-full py-4 bg-[#3E2723] text-white rounded-[1.5rem] font-black uppercase tracking-[0.2em] text-[12px] shadow-xl hover:bg-[#5D4037] active:scale-95 transition-all flex items-center justify-center gap-3 disabled:opacity-50">
+            {isSubmitting ? <><Loader2 size={16} className="animate-spin" /> MEMPROSES...</> : <><CheckCircle2 size={16} /> SELESAIKAN TRANSAKSI</>}
           </button>
         </div>
       </div>
-
-      <style jsx>{`
+       <style jsx>{`
         .custom-scrollbar::-webkit-scrollbar { width: 4px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #E5DCC5; border-radius: 10px; }
