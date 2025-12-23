@@ -28,11 +28,10 @@ interface Order {
 interface AdminContextType {
   products: Product[];
   orders: Order[];
-  reservations: any[];
+  reservations: any[]; // Pastikan ini any[]
   donationBalance: number;
   isLoading: boolean;
   
-  // Fungsi refreshData
   refreshData: () => Promise<void>; 
   updateProduct: (id: number | string, newData: { price?: number; stock?: number }) => void;
 }
@@ -43,10 +42,10 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
   const [products, setProducts] = useState<Product[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   
-  // 👇👇👇 PERBAIKAN UTAMA: Tambahkan <any[]> 👇👇👇
+  // 👇👇👇 FORCE FIX: Tambahkan <any[]> DISINI 👇👇👇
   const [reservations, setReservations] = useState<any[]>([]); 
-  // 👆👆👆 INI YANG BIKIN ERROR HILANG 👆👆👆
-
+  // 👆👆👆 INI WAJIB ADA BIAR TIDAK ERROR NEVER[]
+  
   const [donationBalance, setDonationBalance] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -68,7 +67,7 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
       const resReservasi = await fetch("/api/reservations");
       const dataReservasi = await resReservasi.json();
       
-      // Karena sudah any[], baris ini jadi AMAN
+      // Karena sudah any[], ini aman
       if (Array.isArray(dataReservasi)) setReservations(dataReservasi);
 
     } catch (err) {
