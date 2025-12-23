@@ -30,7 +30,10 @@ export async function GET() {
     const conn = await connectDB();
     const db = conn.connection.db;
     const donations = await db.collection("donations").find({}).sort({ createdAt: -1 }).toArray();
-    const totalBalance = donations.reduce((sum, d) => sum + (d.amount || 0), 0);
+
+    // --- PERBAIKAN DI SINI ---
+    // Saya menambahkan ': any' pada (sum, d) agar TypeScript tidak error lagi
+    const totalBalance = donations.reduce((sum: any, d: any) => sum + (d.amount || 0), 0);
 
     return NextResponse.json({ balance: totalBalance, donors: donations });
   } catch (e) {
@@ -38,7 +41,7 @@ export async function GET() {
   }
 }
 
-// 3. HAPUS SEMUA DATA (DELETE) - BARU
+// 3. HAPUS SEMUA DATA (DELETE)
 export async function DELETE() {
   try {
     const conn = await connectDB();
