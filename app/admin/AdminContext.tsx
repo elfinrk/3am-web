@@ -25,7 +25,7 @@ interface Order {
   createdAt: string;
 }
 
-// 👇👇👇 BAGIAN INI YANG MENYEBABKAN ERROR BUILD 👇👇👇
+// 👇👇👇 BAGIAN PENTING: JANGAN DIHAPUS 👇👇👇
 interface AdminContextType {
   products: Product[];
   orders: Order[];
@@ -33,7 +33,7 @@ interface AdminContextType {
   donationBalance: number;
   isLoading: boolean;
   
-  // ANDA WAJIB MENULISKAN DEFINISI TIPE DISINI AGAR TYPESCRIPT TIDAK MARAH
+  // Definisi Fungsi refreshData WAJIB ADA DISINI
   refreshData: () => Promise<void>; 
   
   updateProduct: (id: number | string, newData: { price?: number; stock?: number }) => void;
@@ -122,7 +122,7 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
         reservations,
         donationBalance,
         isLoading,
-        refreshData, // <--- JANGAN LUPA EXPORT DISINI JUGA
+        refreshData, // <--- WAJIB DI-EXPORT DISINI
         updateProduct
       }}
     >
