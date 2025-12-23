@@ -30,7 +30,7 @@ export default function OrderPage() {
       try {
         const res = await fetch("/api/products");
         const data = await res.json();
-        // Hanya ambil menu makanan/minuman
+        // Hanya ambil menu makanan/minuman (filter merch jika perlu)
         setMenuItems(data.filter((item: any) => item.category !== "merch"));
       } catch (err) {
         console.error("Gagal sinkron data");
@@ -45,9 +45,9 @@ export default function OrderPage() {
   const updateCart = (id: string, delta: number) => {
     const item = menuItems.find(m => (m._id === id || m.id === id));
     
-    // Jika mencoba menambah tapi stok 0 atau sudah mencapai batas stok
+    // Proteksi: Cegah tambah jika stok habis
     if (delta > 0 && item && item.stock <= (cart[id] || 0)) {
-      alert(`Maaf, stok ${item.name} sudah habis atau mencapai batas.`);
+      alert(`Maaf, stok ${item.name} sudah habis.`);
       return;
     }
 
@@ -64,7 +64,7 @@ export default function OrderPage() {
     return total + (item ? item.price * qty : 0);
   }, 0);
 
-  // --- 3. LOGIKA CHECKOUT ---
+  // --- 3. LOGIKA CHECKOUT (DENGAN CART ITEMS) ---
   const handleCheckout = async (e: React.FormEvent) => {
     e.preventDefault();
     if (totalItems === 0) return alert("Keranjang masih kosong!");
@@ -83,18 +83,21 @@ export default function OrderPage() {
       items: itemsDetail,
       total: totalPrice,
       type: orderType === "delivery" ? "Delivery" : "Pickup",
-      notes: formData.notes
+      notes: formData.notes,
+      
+      // --- WAJIB ADA: Kirim data cart agar backend bisa potong stok ---
+      cartItems: cart 
     };
 
     try {
-      // Simpan ke Admin Panel
+      // Kirim ke Backend
       await fetch("/api/orders", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(orderData),
       });
 
-      // Format WhatsApp
+      // Buka WhatsApp
       const itemsListWA = Object.entries(cart).map(([id, qty]) => {
         const item = menuItems.find(m => m._id === id || m.id === id);
         return item ? `- ${item.name} (${qty}x) : Rp ${(item.price * qty).toLocaleString('id-ID')}` : "";
@@ -104,6 +107,7 @@ export default function OrderPage() {
 
       window.open(`https://wa.me/${ADMIN_WA}?text=${encodeURIComponent(message)}`, '_blank');
       setCart({});
+      setFormData({ name: "", phone: "", address: "", notes: "" }); 
     } catch (err) {
       alert("Gagal koneksi ke database Admin.");
     } finally {
@@ -166,7 +170,9 @@ export default function OrderPage() {
                 >
                   <div className="flex items-center gap-4">
                     <div className="relative w-14 h-14 rounded-xl overflow-hidden flex-shrink-0 bg-gray-100/50 shadow-sm p-1">
-                      <Image src={item.img || item.image} alt={item.name} fill className="object-contain group-hover:scale-105 transition-transform duration-500" />
+                      {item.img || item.image ? (
+                        <Image src={item.img || item.image} alt={item.name} fill className="object-contain group-hover:scale-105 transition-transform duration-500" />
+                      ) : <div className="w-full h-full bg-gray-200" />}
                     </div>
                     <div>
                       <h3 className="font-bold text-[#3E2723] text-base leading-tight group-hover:text-orange-800 transition">{item.name}</h3>
@@ -177,7 +183,6 @@ export default function OrderPage() {
                     </div>
                   </div>
 
-                  {/* KONTROL ITEM BERDASARKAN STOK */}
                   {item.stock <= 0 ? (
                     <div className="bg-red-50 text-red-600 px-3 py-1.5 rounded-xl text-[10px] font-bold uppercase tracking-wider mr-2 border border-red-100">Habis</div>
                   ) : (
@@ -222,7 +227,7 @@ export default function OrderPage() {
                       )}
                     </AnimatePresence>
                     <div className="bg-white/10 rounded-xl p-3 border border-white/5 focus-within:border-orange-300/50 transition">
-                      <input placeholder="Catatan (Opsional, cth: Gula sedikit)" className="bg-transparent w-full outline-none placeholder-white/40 text-sm" value={formData.notes} onChange={e => setFormData({ ...formData, notes: e.target.value })} />
+                      <input placeholder="Catatan (Opsional)" className="bg-transparent w-full outline-none placeholder-white/40 text-sm" value={formData.notes} onChange={e => setFormData({ ...formData, notes: e.target.value })} />
                     </div>
                   </div>
                   <div className="bg-black/20 p-4 rounded-2xl space-y-2 mt-6">

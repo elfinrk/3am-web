@@ -3,309 +3,281 @@
 import { useState, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { 
-  ArrowLeft, 
-  Heart, 
-  Gift, 
-  BookOpen, 
-  Smile, 
-  Coffee,
-  CheckCircle2,
-  ArrowRight
-} from "lucide-react";
+import { ArrowLeft, Heart, CheckCircle, Sparkles, CreditCard, QrCode, Copy } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import confetti from "canvas-confetti"; // Pastikan install: npm install canvas-confetti @types/canvas-confetti
+import confetti from "canvas-confetti"; 
 
-// --- DATA PILIHAN DONASI ---
-const donationTiers = [
-  {
-    amount: 25000,
-    label: "Traktir Jajan",
-    desc: "Setara dengan paket makan siang sehat untuk satu anak.",
-    icon: <Coffee size={32} className="text-[#3E2723]" />,
-    emoji: "🍱"
-  },
-  {
-    amount: 50000,
-    label: "Paket Belajar",
-    desc: "Membantu membeli buku tulis dan alat tulis baru.",
-    icon: <BookOpen size={32} className="text-[#3E2723]" />,
-    emoji: "📚"
-  },
-  {
-    amount: 100000,
-    label: "Seragam Baru",
-    desc: "Patungan untuk membelikan seragam sekolah yang layak.",
-    icon: <Gift size={32} className="text-[#3E2723]" />,
-    emoji: "👕"
-  },
-  {
-    amount: 250000,
-    label: "Full Senyum",
-    desc: "Support biaya operasional panti asuhan selama sehari.",
-    icon: <Smile size={32} className="text-[#3E2723]" />,
-    emoji: "💖"
-  }
-];
+const PAYMENT_DATA = {
+  bank: { name: "BCA", number: "7275472760", holder: "3.AM COFFEE OFFICIAL" },
+  qris: "/qris.jpg" 
+};
 
 export default function DonatePage() {
-  const [selectedTier, setSelectedTier] = useState<number | null>(null);
-  const [customAmount, setCustomAmount] = useState<string>("");
-  const [isDonated, setIsDonated] = useState(false);
+  const [selectedAmount, setSelectedAmount] = useState<number | null>(null);
+  const [displayCustomAmount, setDisplayCustomAmount] = useState("");
+  const [formData, setFormData] = useState({ name: "", message: "" });
+  const [paymentMethod, setPaymentMethod] = useState<"qris" | "transfer">("qris");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [currentSlide, setCurrentSlide] = useState(0);
 
-  // Fungsi saat tombol donasi ditekan
-  const handleDonate = () => {
-    // Panggil efek confetti
-    const duration = 3 * 1000;
-    const animationEnd = Date.now() + duration;
-    const defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 0 };
+  // --- SLIDER CERITA ---
+  const stories = [
+    { img: "https://images.unsplash.com/photo-1488521787991-ed7bbaae773c?q=80&w=1000", title: "Berbagi Senyuman", text: "Donasi Anda adalah alasan mereka tersenyum hari ini." },
+    { img: "https://images.unsplash.com/photo-1509099836639-18ba1795216d?q=80&w=1000", title: "Mewujudkan Mimpi", text: "Membantu pendidikan anak-anak untuk masa depan yang lebih cerah." },
+    { img: "https://images.unsplash.com/photo-1593113598332-cd288d649433?q=80&w=1000", title: "Hangatnya Berbagi", text: "Kepedulian Anda menghangatkan hati yang membutuhkan." }
+  ];
 
-    const randomInRange = (min: number, max: number) => Math.random() * (max - min) + min;
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentSlide((prev) => (prev + 1) % stories.length), 5000);
+    return () => clearInterval(timer);
+  }, []);
 
-    const interval: any = setInterval(function() {
-      const timeLeft = animationEnd - Date.now();
+  // --- OPSI NOMINAL ---
+  const donationOptions = [
+    20000, 50000, 75000, 
+    100000, 250000, 500000
+  ];
 
-      if (timeLeft <= 0) {
-        return clearInterval(interval);
+  // --- LOGIC FORMATTER ---
+  const formatNumber = (num: string) => num.replace(/\D/g, "").replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+
+  // 1. Logic saat mengetik manual
+  const handleCustomAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    const rawVal = Number(val.replace(/\D/g, "")); // Hapus titik untuk cek angka murni
+    
+    // Format tampilan dengan titik
+    setDisplayCustomAmount(formatNumber(val));
+
+    // Cek apakah angka yang diketik cocok dengan salah satu kotak?
+    if (donationOptions.includes(rawVal)) {
+        setSelectedAmount(rawVal); // Nyalakan kotak
+    } else {
+        setSelectedAmount(null); // Matikan kotak
+    }
+  };
+
+  // 2. Logic saat kotak diklik (Sinkronisasi ke Input)
+  const handleSelectAmount = (amount: number) => {
+    setSelectedAmount(amount); // Highlight kotak
+    setDisplayCustomAmount(formatNumber(amount.toString())); // Isi Input text otomatis
+  };
+
+  const triggerConfetti = () => {
+    confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 }, colors: ['#D32F2F', '#FFA000', '#FFFFFF'] });
+  };
+
+  const handleDonate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    // Ambil nilai dari displayCustomAmount (karena input text adalah sumber utama sekarang)
+    const rawCustomAmount = Number(displayCustomAmount.replaceAll(".", ""));
+    
+    if (!rawCustomAmount || rawCustomAmount < 10000) return alert("Mohon masukkan nominal minimal Rp 10.000");
+
+    setIsSubmitting(true);
+
+    try {
+      const res = await fetch("/api/donate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          amount: rawCustomAmount,
+          name: formData.name,
+          message: formData.message,
+          method: paymentMethod
+        })
+      });
+
+      if (res.ok) {
+        triggerConfetti();
+        setShowSuccess(true);
+        setFormData({ name: "", message: "" });
+        setSelectedAmount(null);
+        setDisplayCustomAmount("");
+      } else {
+        alert("Gagal memproses, silakan coba lagi.");
       }
+    } catch (err) {
+      alert("Gagal koneksi ke server.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
-      const particleCount = 50 * (timeLeft / duration);
-      confetti({ ...defaults, particleCount, origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 } });
-      confetti({ ...defaults, particleCount, origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 } });
-    }, 250);
-
-    setIsDonated(true);
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    alert("Nomor rekening disalin!");
   };
 
   return (
-    <div className="min-h-screen bg-[#F9F5E8] font-body text-[#3E2723] overflow-x-hidden selection:bg-[#FFD700] selection:text-[#3E2723]">
+    <div className="min-h-screen bg-[#FAFAFA] font-sans text-[#3E2723] selection:bg-[#3E2723] selection:text-white overflow-x-hidden">
       
-      <style jsx global>{`
-        @import url('https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap');
-        .font-doodle { font-family: 'Patrick Hand', cursive; }
-      `}</style>
-
-      {/* --- NAVBAR --- */}
-      <nav className="sticky top-0 z-50 w-full bg-[#F9F5E8]/90 backdrop-blur-md border-b border-[#E5DCC5] px-6 h-20 flex items-center justify-between">
-        <Link href="/" className="flex items-center gap-2 group">
-          <div className="p-2 rounded-full bg-white border border-[#E5DCC5] group-hover:bg-[#3E2723] group-hover:text-white transition-all">
-             <ArrowLeft size={20} />
-          </div>
-          <span className="font-bold text-[#3E2723] hidden sm:block">Back to Home</span>
+      <nav className="absolute top-0 w-full p-6 z-30 flex justify-between items-center pointer-events-none">
+        <Link href="/" className="pointer-events-auto flex items-center gap-2 bg-white/80 backdrop-blur-md px-5 py-2.5 rounded-full shadow-sm hover:bg-white transition-all text-sm font-bold border border-white/50">
+          <ArrowLeft size={18} /> Kembali
         </Link>
-        <div className="flex items-center gap-2">
-          <Image src="/Logo.png" alt="Logo" width={40} height={40} />
-          <span className="font-display font-bold text-xl tracking-tight">Share <span className="text-red-500 italic">Kindness</span></span>
-        </div>
-        <div className="w-10"></div> 
       </nav>
 
-      <main className="container mx-auto px-6 py-12">
+      <div className="grid lg:grid-cols-12 min-h-screen">
         
-        <div className="flex flex-col lg:flex-row gap-12 items-start">
-          
-          {/* LEFT SIDE: EMOTIONAL HOOK & IMAGE */}
-          <div className="w-full lg:w-1/2 sticky top-24">
+        {/* --- KIRI: VISUAL STORYTELLING --- */}
+        <div className="lg:col-span-5 relative bg-[#2E1C16] text-[#F3EDE2] flex flex-col justify-end p-10 lg:p-16 overflow-hidden min-h-[40vh] lg:min-h-auto">
+          <AnimatePresence mode="wait">
             <motion.div 
-              initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
-              className="relative"
+              key={currentSlide}
+              initial={{ opacity: 0, scale: 1.1 }} animate={{ opacity: 0.6, scale: 1 }} exit={{ opacity: 0 }} transition={{ duration: 1.5 }}
+              className="absolute inset-0 z-0"
             >
-              <span className="inline-block bg-[#FFE4B5] px-4 py-1 rounded-full border border-[#3E2723] font-bold text-sm mb-4 transform -rotate-2">
-                🤝 #3AMBerbagi
-              </span>
-              <h1 className="font-display text-5xl md:text-6xl font-bold mb-6 leading-tight">
-                Satu Cangkir Kopi, <br/> <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#3E2723] to-[#8D6E63]">Sejuta Senyuman.</span>
-              </h1>
-              
-              {/* IMAGE FRAME WITH DOODLES */}
-              <div className="relative mt-8 group">
-                <motion.div 
-                  animate={{ rotate: [-1, 1, -1] }} transition={{ duration: 5, repeat: Infinity }}
-                  className="absolute -top-4 -left-4 w-16 h-16 bg-yellow-400 rounded-full blur-xl opacity-50"
-                ></motion.div>
-                
-                <div className="relative aspect-video rounded-[2rem] overflow-hidden border-4 border-[#3E2723] shadow-[10px_10px_0px_#3E2723] transform group-hover:translate-x-1 group-hover:translate-y-1 transition-transform">
-                  {/* Gunakan gambar anak-anak dari file Anda (image_b0339f.png) */}
-                  <Image src="/kids.jpeg" alt="Anak-anak tersenyum" fill className="object-cover" />
-                  
-                  {/* Overlay Text */}
-                  <div className="absolute bottom-0 left-0 w-full bg-gradient-to-t from-black/80 to-transparent p-6 pt-20">
-                    <p className="text-white font-doodle text-xl">"Terima kasih Kakak baik!" - Adik Asuh 3.AM</p>
-                  </div>
-                </div>
+               <Image src={stories[currentSlide].img} alt="Story" fill className="object-cover grayscale mix-blend-overlay" />
+            </motion.div>
+          </AnimatePresence>
+          <div className="absolute inset-0 bg-gradient-to-t from-[#2E1C16] via-[#2E1C16]/50 to-transparent z-0" />
+          
+          <div className="relative z-10 space-y-4 mb-10">
+            <div className="inline-flex items-center gap-2 bg-white/10 backdrop-blur-md px-4 py-1.5 rounded-full border border-white/10 text-xs font-bold tracking-widest uppercase">
+                <Heart size={12} className="fill-red-500 text-red-500 animate-pulse" /> #3AMBerbagi
+            </div>
+            <h1 className="text-3xl lg:text-5xl font-serif font-bold leading-tight">{stories[currentSlide].title}</h1>
+            <p className="text-sm lg:text-lg opacity-80 font-light">{stories[currentSlide].text}</p>
+            
+            <div className="flex gap-2 pt-2">
+              {stories.map((_, idx) => (
+                <div key={idx} className={`h-1.5 rounded-full transition-all duration-500 ${currentSlide === idx ? "w-8 bg-orange-400" : "w-2 bg-white/30"}`} />
+              ))}
+            </div>
+          </div>
+        </div>
 
-                {/* Floating Heart Icon */}
-                <motion.div 
-                  animate={{ y: [0, -10, 0] }} transition={{ duration: 2, repeat: Infinity }}
-                  className="absolute -top-6 -right-6 bg-red-500 text-white p-4 rounded-full border-2 border-[#F9F5E8] shadow-lg"
-                >
-                  <Heart fill="currentColor" size={24} />
-                </motion.div>
+        {/* --- KANAN: FORM DONASI --- */}
+        <div className="lg:col-span-7 bg-white flex flex-col justify-center p-6 lg:p-20 relative shadow-2xl lg:rounded-l-[3rem] lg:-ml-10 z-20">
+          <div className="max-w-xl mx-auto w-full space-y-8">
+            
+            <div className="text-center lg:text-left">
+                <h2 className="text-3xl font-bold text-[#3E2723] mb-1">Pilih Nominal Donasi</h2>
+                <p className="text-gray-500 text-sm">Berapapun nominalnya, sangat berarti bagi mereka.</p>
+            </div>
+
+            <form onSubmit={handleDonate} className="space-y-8">
+              
+              {/* --- GRID NOMINAL --- */}
+              <div className="grid grid-cols-3 gap-3 md:gap-4">
+                {donationOptions.map((amount) => (
+                  <motion.div 
+                    key={amount}
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => handleSelectAmount(amount)}
+                    className={`cursor-pointer rounded-2xl py-6 px-2 text-center border-2 transition-all duration-200 relative overflow-hidden group ${
+                        selectedAmount === amount 
+                        ? "border-[#3E2723] bg-[#3E2723] text-white shadow-xl shadow-[#3E2723]/30" 
+                        : "border-gray-100 bg-white hover:border-orange-200 hover:bg-orange-50/50"
+                    }`}
+                  >
+                    <span className={`text-xs font-bold uppercase tracking-widest block mb-1 ${selectedAmount === amount ? "text-white/60" : "text-gray-400"}`}>Rp</span>
+                    <span className="text-xl md:text-2xl font-black tracking-tight">{(amount / 1000)}k</span>
+                    
+                    {/* Centang Muncul */}
+                    {selectedAmount === amount && (
+                        <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} className="absolute top-2 right-2 bg-white text-[#3E2723] rounded-full p-0.5">
+                            <CheckCircle size={14} className="fill-[#3E2723] text-white"/>
+                        </motion.div>
+                    )}
+                  </motion.div>
+                ))}
               </div>
 
-              <p className="mt-8 text-lg text-[#6A4A38] leading-relaxed">
-                Satu kebaikan, menjangkau lebih dari satu tempat. Melalui program donasi 3.AM, setiap bantuan yang terkumpul akan disalurkan ke beberapa panti asuhan di Bandung dan sekitarnya. 
-                <span className="font-bold"> 100% donasi Anda</span> Distribusi dilakukan secara bertahap dan menyesuaikan kebutuhan masing-masing panti.
-                Kami percaya, kebaikan tidak harus berhenti di satu tempat.
-                Satu cangkir kopi bisa ikut menghangatkan banyak cerita.
-              </p>
-            </motion.div>
-          </div>
+              {/* --- INPUT NOMINAL (TERISI OTOMATIS) --- */}
+              <div className="relative group">
+                <div className="absolute inset-y-0 left-0 pl-5 flex items-center pointer-events-none">
+                  <span className="text-[#3E2723] font-bold text-lg">Rp</span>
+                </div>
+                <input 
+                  type="text" 
+                  placeholder="Nominal Lainnya..."
+                  value={displayCustomAmount}
+                  onChange={handleCustomAmountChange}
+                  className={`w-full bg-gray-50 pl-14 pr-4 py-5 rounded-2xl border-2 outline-none font-bold text-2xl text-[#3E2723] placeholder:text-gray-300 placeholder:font-bold transition-all focus:bg-white focus:border-[#3E2723] ${displayCustomAmount ? 'border-[#3E2723] bg-white' : 'border-transparent'}`}
+                />
+              </div>
 
-          {/* RIGHT SIDE: INTERACTIVE DONATION WIDGET */}
-          <div className="w-full lg:w-1/2">
-            <motion.div 
-              initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.2 }}
-              className="bg-white rounded-[2.5rem] p-8 border-2 border-[#E5DCC5] shadow-xl relative overflow-hidden"
-            >
-              {!isDonated ? (
-                <>
-                  <div className="mb-8 text-center">
-                    <h2 className="font-display text-3xl font-bold text-[#3E2723]">Pilih Paket Kebaikan</h2>
-                    <p className="text-[#6A4A38] text-sm">Pilih nominal atau masukkan jumlah sendiri.</p>
-                  </div>
+              {/* Form Data Diri */}
+              <div className="bg-white border border-gray-100 p-6 rounded-3xl space-y-4 shadow-sm">
+                 <div className="grid grid-cols-1 gap-4">
+                    <input 
+                        type="text" placeholder="Nama (Hamba Allah)" 
+                        value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} 
+                        className="w-full bg-gray-50 border border-transparent focus:border-[#3E2723] rounded-xl px-4 py-3 outline-none transition-all font-medium text-[#3E2723] text-sm"
+                    />
+                    <textarea 
+                        placeholder="Tulis doa atau pesan semangat..." rows={2}
+                        value={formData.message} onChange={(e) => setFormData({...formData, message: e.target.value})} 
+                        className="w-full bg-gray-50 border border-transparent focus:border-[#3E2723] rounded-xl px-4 py-3 outline-none transition-all font-medium text-[#3E2723] text-sm resize-none"
+                    />
+                 </div>
+              </div>
 
-                  {/* GRID PILIHAN DONASI */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
-                    {donationTiers.map((tier, idx) => (
-                      <motion.button
-                        key={idx}
-                        whileHover={{ scale: 1.02 }}
-                        whileTap={{ scale: 0.98 }}
-                        onClick={() => { setSelectedTier(tier.amount); setCustomAmount(""); }}
-                        className={`relative p-4 rounded-2xl border-2 text-left transition-all ${selectedTier === tier.amount ? "border-[#3E2723] bg-[#F9F5E8]" : "border-[#E5DCC5] bg-white hover:border-[#3E2723]/50"}`}
-                      >
-                        <div className="flex justify-between items-start mb-2">
-                          <div className="p-2 bg-white rounded-full shadow-sm border border-[#E5DCC5]">{tier.icon}</div>
-                          {selectedTier === tier.amount && <CheckCircle2 className="text-green-500" size={20}/>}
-                        </div>
-                        <h3 className="font-bold text-lg text-[#3E2723]">Rp {tier.amount.toLocaleString()}</h3>
-                        <p className="text-xs font-bold text-red-500 uppercase tracking-wide mb-1">{tier.label}</p>
-                        <p className="text-xs text-[#6A4A38] leading-tight">{tier.desc}</p>
-                      </motion.button>
-                    ))}
-                  </div>
-
-                  {/* CUSTOM AMOUNT INPUT */}
-                  <div className="relative mb-8">
-                    <label className="text-xs font-bold uppercase tracking-widest text-[#3E2723] mb-2 block">Atau Masukkan Nominal Lain</label>
-                    <div className="relative">
-                      <span className="absolute left-4 top-1/2 -translate-y-1/2 font-bold text-[#3E2723]">Rp</span>
-                      <input 
-                        type="number" 
-                        value={customAmount}
-                        onChange={(e) => { setCustomAmount(e.target.value); setSelectedTier(null); }}
-                        placeholder="0"
-                        className="w-full bg-[#F9F5E8] border-2 border-[#E5DCC5] rounded-xl py-4 pl-12 pr-4 font-bold text-xl text-[#3E2723] focus:outline-none focus:border-[#3E2723] transition-colors placeholder:text-[#3E2723]/20"
-                      />
-                    </div>
-                  </div>
-
-                  {/* IMPACT PREVIEW (Dinamic Text) */}
-                  <AnimatePresence mode="wait">
-                    {(selectedTier || customAmount) && (
-                      <motion.div 
-                        initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }}
-                        className="bg-[#3E2723] text-[#F9F5E8] p-4 rounded-xl mb-8 flex items-center gap-4"
-                      >
-                        <div className="text-4xl">
-                          {selectedTier ? donationTiers.find(t => t.amount === selectedTier)?.emoji : "🌟"}
-                        </div>
-                        <div>
-                          <p className="text-xs opacity-70 uppercase tracking-wide">Dampak Donasi Kamu:</p>
-                          <p className="font-bold font-doodle text-lg">
-                            {selectedTier 
-                              ? `Wow! Kamu baru saja menyumbang "${donationTiers.find(t => t.amount === selectedTier)?.label}"` 
-                              : "Setiap Rupiah sangat berarti untuk masa depan mereka!"}
-                          </p>
-                        </div>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-
-                  {/* DONATE BUTTON */}
-                  <button 
-                    onClick={handleDonate}
-                    disabled={!selectedTier && !customAmount}
-                    className="w-full bg-[#3E2723] text-white py-4 rounded-2xl font-bold text-xl shadow-[4px_4px_0px_#8D6E63] hover:shadow-[2px_2px_0px_#8D6E63] active:translate-y-[2px] active:shadow-none transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                  >
-                    <Heart fill="white" className="animate-pulse" /> Kirim Kebaikan Sekarang
-                  </button>
+              {/* Metode Pembayaran */}
+              <div className="space-y-4">
+                  <p className="text-xs font-bold text-gray-400 uppercase tracking-widest text-center">Metode Pembayaran</p>
                   
-                  <p className="text-center text-xs text-[#6A4A38]/60 mt-4 flex items-center justify-center gap-1">
-                    <LockIcon size={12}/> Pembayaran aman & terenkripsi
-                  </p>
-                </>
-              ) : (
-                // SUCCESS STATE (Tampilan setelah donasi)
-                <motion.div 
-                  initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
-                  className="text-center py-10"
-                >
-                  <motion.div 
-                    animate={{ rotate: [0, 10, -10, 0] }} transition={{ repeat: Infinity, duration: 2 }}
-                    className="w-24 h-24 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6 text-6xl shadow-inner"
-                  >
-                    🎉
-                  </motion.div>
-                  <h2 className="font-display text-4xl font-bold text-[#3E2723] mb-4">Terima Kasih, Orang Baik!</h2>
-                  <p className="text-lg text-[#6A4A38] font-doodle mb-8">
-                    "Kebaikanmu sudah kami terima. Semoga rezekimu diganti berlipat ganda seperti foam di Cappuccino kami!"
-                  </p>
-                  
-                  <div className="bg-[#F9F5E8] p-6 rounded-2xl border border-dashed border-[#3E2723] mb-8 relative">
-                    <div className="absolute -top-3 left-1/2 -translate-x-1/2 w-40 h-6 bg-[#3E2723]/10 rounded-full blur-sm"></div>
-                    <p className="text-xs uppercase tracking-widest text-[#3E2723]/60 mb-2">Bukti Kebaikan Digital</p>
-                    <h3 className="font-bold text-3xl text-[#3E2723]">Rp {(selectedTier || Number(customAmount)).toLocaleString()}</h3>
-                    <p className="text-sm text-[#3E2723] mt-1">{new Date().toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                  <div className="flex gap-3">
+                     <button type="button" onClick={() => setPaymentMethod("qris")} className={`flex-1 py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2 border-2 transition-all ${paymentMethod === 'qris' ? 'border-[#3E2723] bg-[#3E2723]/5 text-[#3E2723]' : 'border-gray-100 text-gray-400 hover:border-gray-200'}`}>
+                        <QrCode size={18} /> QRIS
+                     </button>
+                     <button type="button" onClick={() => setPaymentMethod("transfer")} className={`flex-1 py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2 border-2 transition-all ${paymentMethod === 'transfer' ? 'border-[#3E2723] bg-[#3E2723]/5 text-[#3E2723]' : 'border-gray-100 text-gray-400 hover:border-gray-200'}`}>
+                        <CreditCard size={18} /> Transfer
+                     </button>
                   </div>
 
-                  <button 
-                    onClick={() => setIsDonated(false)}
-                    className="text-[#3E2723] font-bold hover:underline flex items-center justify-center gap-2 mx-auto"
-                  >
-                    <ArrowLeft size={16}/> Kembali Donasi Lagi
-                  </button>
-                </motion.div>
-              )}
-            </motion.div>
+                  {/* Konten Pembayaran */}
+                  <div className="bg-gray-50 rounded-2xl p-6 text-center border border-gray-100">
+                     {paymentMethod === "qris" ? (
+                        <div className="flex flex-col items-center gap-3">
+                           <div className="bg-white p-2 rounded-xl border shadow-sm">
+                              {/* Pastikan file /qris.jpg ada di public */}
+                              <Image src={PAYMENT_DATA.qris} alt="QRIS" width={180} height={180} className="object-contain" />
+                           </div>
+                           <p className="text-xs text-gray-500">Scan untuk donasi instan</p>
+                        </div>
+                     ) : (
+                        <div className="flex flex-col items-center gap-2">
+                           <h3 className="text-2xl font-black text-[#0060AF] tracking-tighter italic">BCA</h3>
+                           <p className="text-xl font-mono font-bold text-[#3E2723]">{PAYMENT_DATA.bank.number}</p>
+                           <p className="text-xs font-bold text-gray-500">{PAYMENT_DATA.bank.holder}</p>
+                           <button type="button" onClick={() => copyToClipboard(PAYMENT_DATA.bank.number)} className="mt-2 text-xs font-bold text-[#3E2723] underline flex items-center gap-1"><Copy size={12} /> Salin</button>
+                        </div>
+                     )}
+                  </div>
+              </div>
+
+              {/* Submit Button */}
+              <motion.button 
+                whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
+                type="submit" disabled={isSubmitting}
+                className="w-full bg-[#3E2723] text-white py-5 rounded-2xl font-bold text-lg shadow-xl hover:bg-[#2E1C16] transition-all flex items-center justify-center gap-3 disabled:opacity-50"
+              >
+                {isSubmitting ? <Sparkles className="animate-spin" /> : <><Heart className="fill-white" /> Konfirmasi Donasi</>}
+              </motion.button>
+
+            </form>
           </div>
-
         </div>
+      </div>
 
-        {/* --- SOCIAL PROOF TICKER --- */}
-        <div className="mt-20 border-t border-[#E5DCC5] pt-10 overflow-hidden relative">
-           <p className="text-center font-bold text-[#3E2723] mb-6 uppercase tracking-widest text-sm">Donatur Terbaru Hari Ini</p>
-           <div className="flex gap-8 whitespace-nowrap opacity-60">
-             <motion.div 
-               animate={{ x: [0, -1000] }} transition={{ repeat: Infinity, duration: 20, ease: "linear" }}
-               className="flex gap-8"
-             >
-                {[...Array(10)].map((_, i) => (
-                  <div key={i} className="flex items-center gap-2 bg-white px-4 py-2 rounded-full border border-[#E5DCC5]">
-                    <div className="w-6 h-6 bg-[#3E2723] rounded-full text-white text-xs flex items-center justify-center">?</div>
-                    <span className="font-doodle">Hamba Allah - Rp {Math.floor(Math.random() * 100) + 10}.000</span>
-                  </div>
-                ))}
-             </motion.div>
-           </div>
-           {/* Fade edges */}
-           <div className="absolute top-0 left-0 w-20 h-full bg-gradient-to-r from-[#F9F5E8] to-transparent pointer-events-none"></div>
-           <div className="absolute top-0 right-0 w-20 h-full bg-gradient-to-l from-[#F9F5E8] to-transparent pointer-events-none"></div>
-        </div>
-
-      </main>
-
-      <footer className="bg-[#2E1C16] py-10 text-center text-[#F9F5E8] relative z-10 mt-10">
-        <p className="font-doodle text-xl mb-2">"Sharing is Caring."</p>
-        <p className="text-xs opacity-50">© 2025 3.AM Coffee Charity Initiative.</p>
-      </footer>
-
+      {/* SUCCESS MODAL */}
+      <AnimatePresence>
+        {showSuccess && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#3E2723]/90 backdrop-blur-md">
+            <motion.div initial={{ scale: 0.8 }} animate={{ scale: 1 }} className="bg-white w-full max-w-sm rounded-[3rem] p-10 text-center shadow-2xl relative overflow-hidden">
+              <div className="w-20 h-20 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-6"><CheckCircle size={40} /></div>
+              <h2 className="text-2xl font-bold text-[#3E2723] mb-2">Terima Kasih!</h2>
+              <p className="text-gray-500 text-sm mb-6">Donasi Anda telah diterima. Semoga menjadi berkah.</p>
+              <button onClick={() => setShowSuccess(false)} className="w-full py-3 bg-[#3E2723] text-white rounded-xl font-bold">Kembali</button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
-
-// Icon komponen kecil
-const LockIcon = ({size}:{size:number}) => (
-  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-)

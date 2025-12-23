@@ -4,12 +4,12 @@ import { useState } from "react";
 import { useAdmin } from "../AdminContext";
 import { 
   Plus, Minus, ShoppingBag, Trash2, 
-  CreditCard, Wallet, CheckCircle2, Search, X
+  CreditCard, Wallet, CheckCircle2, Search, Loader2
 } from "lucide-react";
 import Image from "next/image";
 
 interface CartItem {
-  id: number;
+  id: string; // Menggunakan string karena MongoDB ID bentuknya string
   name: string;
   price: number;
   quantity: number;
@@ -17,11 +17,12 @@ interface CartItem {
 }
 
 export default function OfflineOrdersPage() {
-  const { products } = useAdmin();
+  const { products, refreshData } = useAdmin(); 
   const [cart, setCart] = useState<CartItem[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [activeCategory, setActiveCategory] = useState("all");
   const [paymentMethod, setPaymentMethod] = useState<"Tunai" | "QRIS">("Tunai");
+  const [isSubmitting, setIsSubmitting] = useState(false); // Loading state
 
   const categories = [
     { id: "all", name: "All Menu" },
@@ -38,29 +39,107 @@ export default function OfflineOrdersPage() {
     return matchSearch && matchCategory;
   }) || [];
 
+  // --- LOGIC CART ---
   const addToCart = (product: any) => {
+    if (product.stock <= 0) {
+        alert("Stok Habis!");
+        return;
+    }
+
     setCart((prev) => {
-      const existing = prev.find((item) => item.id === product.id);
+      // Pastikan menggunakan _id dari MongoDB
+      const productId = product._id || product.id; 
+      
+      const existing = prev.find((item) => item.id === productId);
+      
       if (existing) {
+        // Cek apakah stok cukup sebelum menambah
+        if (existing.quantity >= product.stock) {
+            alert("Stok tidak mencukupi!");
+            return prev;
+        }
         return prev.map((item) =>
-          item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item
+          item.id === productId ? { ...item, quantity: item.quantity + 1 } : item
         );
       }
-      return [...prev, { ...product, quantity: 1 }];
+      return [...prev, { ...product, id: productId, quantity: 1 }];
     });
   };
 
-  const updateQuantity = (id: number, delta: number) => {
+  const updateQuantity = (id: string, delta: number) => {
+    // Cari data asli produk untuk cek stok limit
+    const originalProduct = products.find(p => (p._id || p.id) === id);
+
     setCart((prev) =>
-      prev.map((item) =>
-        item.id === id ? { ...item, quantity: Math.max(1, item.quantity + delta) } : item
-      )
+      prev.map((item) => {
+        if (item.id === id) {
+            const newQty = item.quantity + delta;
+            
+            // Validasi Stok
+            if (delta > 0 && originalProduct && newQty > originalProduct.stock) {
+                alert("Maksimal stok tercapai!");
+                return item;
+            }
+
+            return { ...item, quantity: Math.max(1, newQty) };
+        }
+        return item;
+      })
     );
   };
 
+  // --- PERHITUNGAN UANG ---
   const subtotal = cart.reduce((acc, item) => acc + item.price * item.quantity, 0);
-  const tax = subtotal * 0.1;
+  const tax = subtotal * 0.1; // Pajak 10%
   const total = subtotal + tax;
+
+  // --- FUNGSI KIRIM KE DATABASE (PENTING!) ---
+  const handleProcessTransaction = async () => {
+    if (cart.length === 0) return;
+    setIsSubmitting(true);
+
+    try {
+        // 1. Format Item Cart untuk dikirim (Format: { "ID_PRODUK": JUMLAH })
+        // Ini digunakan backend untuk memotong stok secara otomatis
+        const cartItemsForBackend: { [key: string]: number } = {};
+        cart.forEach(item => {
+            cartItemsForBackend[item.id] = item.quantity;
+        });
+
+        // 2. Siapkan Data Order
+        const orderData = {
+            customer: "Walk-in Customer", // Nama default kasir
+            phone: "-",
+            address: "Dine-in (Offline)",
+            items: cart.map(i => `${i.name} (${i.quantity}x)`).join(", "), // String ringkasan menu
+            total: total, // Total uang yang masuk ke Dashboard
+            type: "Offline",
+            status: "Selesai", // WAJIB "Selesai" agar masuk hitungan Profit/Revenue
+            paymentMethod: paymentMethod,
+            cartItems: cartItemsForBackend // Data untuk potong stok
+        };
+
+        // 3. Kirim ke API
+        const res = await fetch("/api/orders", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(orderData)
+        });
+
+        if (res.ok) {
+            alert(`✅ Transaksi Berhasil!\nTotal Masuk: Rp ${total.toLocaleString('id-ID')}`);
+            setCart([]); // Kosongkan keranjang
+            if (refreshData) refreshData(); // Update data di Dashboard Admin secara instan
+        } else {
+            alert("❌ Gagal menyimpan transaksi ke database.");
+        }
+    } catch (error) {
+        console.error(error);
+        alert("Terjadi kesalahan sistem.");
+    } finally {
+        setIsSubmitting(false);
+    }
+  };
 
   return (
     <div className="flex flex-col lg:flex-row gap-6 h-[calc(100vh-140px)] overflow-hidden">
@@ -96,27 +175,33 @@ export default function OfflineOrdersPage() {
         </div>
 
         <div className="flex-1 overflow-y-auto grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4 pr-2 pb-10 custom-scrollbar">
-          {filteredProducts.map((p) => (
-            <button
-              key={p.id}
-              onClick={() => addToCart(p)}
-              className="bg-white rounded-[2rem] border border-[#E5DCC5] hover:border-[#3E2723] transition-all group flex flex-col items-center p-3 text-center shadow-sm"
-            >
-              <div className="w-full aspect-square bg-[#F9F5E8] rounded-[1.5rem] flex items-center justify-center mb-3 p-3">
-                <Image src={p.img} alt={p.name} width={120} height={120} className="object-contain group-hover:scale-110 transition-transform duration-500" />
-              </div>
-              <p className="font-bold text-[#3E2723] text-[12px] leading-tight h-8 flex items-center px-1">{p.name}</p>
-              <div className="mt-2 bg-[#F9F5E8] px-3 py-1 rounded-full">
-                <p className="font-bold text-[#8D6E63] text-[10px]">Rp {p.price.toLocaleString('id-ID')}</p>
-              </div>
-            </button>
-          ))}
+          {filteredProducts.map((p) => {
+            const isSoldOut = p.stock <= 0;
+            return (
+                <button
+                key={p._id || p.id}
+                onClick={() => addToCart(p)}
+                disabled={isSoldOut}
+                className={`bg-white rounded-[2rem] border border-[#E5DCC5] transition-all group flex flex-col items-center p-3 text-center shadow-sm relative ${isSoldOut ? 'opacity-60 cursor-not-allowed' : 'hover:border-[#3E2723]'}`}
+                >
+                {isSoldOut && <span className="absolute top-2 right-2 bg-red-500 text-white text-[9px] font-bold px-2 py-1 rounded-full z-10">HABIS</span>}
+                <div className="w-full aspect-square bg-[#F9F5E8] rounded-[1.5rem] flex items-center justify-center mb-3 p-3">
+                    <Image src={p.img} alt={p.name} width={120} height={120} className="object-contain group-hover:scale-110 transition-transform duration-500" />
+                </div>
+                <p className="font-bold text-[#3E2723] text-[12px] leading-tight h-8 flex items-center px-1">{p.name}</p>
+                <div className="mt-2 bg-[#F9F5E8] px-3 py-1 rounded-full">
+                    <p className="font-bold text-[#8D6E63] text-[10px]">Rp {p.price.toLocaleString('id-ID')}</p>
+                </div>
+                </button>
+            );
+          })}
         </div>
       </div>
 
-      {/* --- BAGIAN KANAN: KERANJANG KASIR (COMPACT VERSION) --- */}
+      {/* --- BAGIAN KANAN: KERANJANG KASIR --- */}
       <div className="w-full lg:w-[380px] bg-white rounded-[2.5rem] border border-[#E5DCC5] flex flex-col shadow-2xl overflow-hidden">
-        {/* Header Ramping */}
+        
+        {/* Header Keranjang */}
         <div className="p-5 bg-[#3E2723] text-white flex justify-between items-center">
           <div className="flex items-center gap-2 font-display font-bold tracking-widest uppercase text-[12px]">
             <ShoppingBag size={18} />
@@ -125,7 +210,7 @@ export default function OfflineOrdersPage() {
           <button onClick={() => setCart([])} className="text-[9px] font-black opacity-50 hover:opacity-100 uppercase">CLEAR ALL</button>
         </div>
 
-        {/* List Item diperkecil agar muat lebih banyak */}
+        {/* List Item */}
         <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-gray-50/30 custom-scrollbar">
           {cart.map((item) => (
             <div key={item.id} className="bg-white p-3 rounded-[1.5rem] border border-[#E5DCC5]/40 flex gap-3 shadow-sm transition-all">
@@ -139,7 +224,7 @@ export default function OfflineOrdersPage() {
                   <div className="flex items-center gap-3 border border-[#E5DCC5] px-3 py-1 rounded-xl bg-white scale-90 origin-left">
                     <button onClick={() => updateQuantity(item.id, -1)} className="text-[#3E2723]"><Minus size={12}/></button>
                     <span className="text-[12px] font-black w-3 text-center">{item.quantity}</span>
-                    <button onClick={() => addToCart(item)} className="text-[#3E2723]"><Plus size={12}/></button>
+                    <button onClick={() => updateQuantity(item.id, 1)} className="text-[#3E2723]"><Plus size={12}/></button>
                   </div>
                   <button onClick={() => setCart(cart.filter(i => i.id !== item.id))} className="text-red-200 hover:text-red-500"><Trash2 size={16} /></button>
                 </div>
@@ -154,7 +239,7 @@ export default function OfflineOrdersPage() {
           )}
         </div>
 
-        {/* Ringkasan Pembayaran & Tombol Aktif */}
+        {/* Ringkasan & Tombol Bayar */}
         <div className="p-6 bg-white border-t border-[#E5DCC5] space-y-4">
           <div className="space-y-2">
             <div className="flex justify-between text-[10px] font-black text-gray-400 uppercase tracking-widest">
@@ -171,7 +256,6 @@ export default function OfflineOrdersPage() {
             </div>
           </div>
 
-          {/* Tombol Metode Pembayaran Aktif */}
           <div className="grid grid-cols-2 gap-3">
             <button 
               onClick={() => setPaymentMethod("Tunai")}
@@ -199,14 +283,19 @@ export default function OfflineOrdersPage() {
           </div>
 
           <button 
-            disabled={cart.length === 0}
-            className="w-full py-4 bg-[#3E2723] text-white rounded-[1.5rem] font-black uppercase tracking-[0.2em] text-[12px] shadow-xl hover:bg-[#5D4037] active:scale-95 transition-all flex items-center justify-center gap-3 disabled:opacity-20"
-            onClick={() => {
-              alert(`Transaksi Berhasil! Metode: ${paymentMethod}`);
-              setCart([]);
-            }}
+            disabled={cart.length === 0 || isSubmitting}
+            onClick={handleProcessTransaction}
+            className="w-full py-4 bg-[#3E2723] text-white rounded-[1.5rem] font-black uppercase tracking-[0.2em] text-[12px] shadow-xl hover:bg-[#5D4037] active:scale-95 transition-all flex items-center justify-center gap-3 disabled:opacity-50"
           >
-            SELESAIKAN TRANSAKSI <CheckCircle2 size={16} />
+            {isSubmitting ? (
+                <>
+                    <Loader2 size={16} className="animate-spin" /> MEMPROSES...
+                </>
+            ) : (
+                <>
+                    SELESAIKAN TRANSAKSI <CheckCircle2 size={16} />
+                </>
+            )}
           </button>
         </div>
       </div>

@@ -1,17 +1,20 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { CheckCircle, RotateCcw, Loader2, MapPin, User } from "lucide-react";
+import { CheckCircle, RotateCcw, Loader2, MapPin, User, Trash2 } from "lucide-react";
 
 export default function AdminOrdersPage() {
   const [orders, setOrders] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [processingId, setProcessingId] = useState<string | null>(null);
 
   const fetchOrders = async () => {
     try {
       const res = await fetch("/api/orders");
       const data = await res.json();
-      setOrders(data);
+      // FILTER: HANYA TAMPILKAN ORDER ONLINE (Type bukan 'Offline')
+      const onlineOnly = data.filter((order: any) => order.type !== "Offline");
+      setOrders(onlineOnly);
     } catch (err) {
       console.error("Gagal ambil data");
     } finally {
@@ -21,88 +24,72 @@ export default function AdminOrdersPage() {
 
   useEffect(() => {
     fetchOrders();
-    const interval = setInterval(fetchOrders, 30000); // Auto-refresh
+    const interval = setInterval(fetchOrders, 30000); 
     return () => clearInterval(interval);
   }, []);
 
   const updateStatus = async (mongoId: string, newStatus: string) => {
+    setProcessingId(mongoId);
     try {
-      // WAJIB: Menggunakan order._id asli dari MongoDB
-      const res = await fetch(`/api/orders/${mongoId}`, {
+      await fetch(`/api/orders/${mongoId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: newStatus })
       });
-      
-      const data = await res.json();
-      
-      if (res.ok) {
-        fetchOrders(); // Segarkan tabel jika sukses
-      } else {
-        alert(`Error: ${data.error}`); // Tampilkan pesan error spesifik
-      }
-    } catch (err) {
-      alert("Kesalahan koneksi ke server");
-    }
+      fetchOrders();
+    } catch (err) { alert("Gagal koneksi"); } finally { setProcessingId(null); }
   };
 
-  if (isLoading) return (
-    <div className="flex flex-col items-center justify-center min-h-[400px]">
-      <Loader2 className="animate-spin text-[#3E2723] mb-4" size={40} />
-      <p className="font-bold text-[#3E2723]">Sinkronisasi Database 3am...</p>
-    </div>
-  );
+  const deleteOrder = async (mongoId: string) => {
+    if (!confirm("Hapus pesanan ini?")) return;
+    setProcessingId(mongoId);
+    try {
+      await fetch(`/api/orders/${mongoId}`, { method: "DELETE" });
+      setOrders(prev => prev.filter(o => o._id !== mongoId));
+    } catch (err) { alert("Error"); } finally { setProcessingId(null); }
+  };
+
+  if (isLoading) return <div className="flex justify-center p-10"><Loader2 className="animate-spin text-[#3E2723]" /></div>;
 
   return (
-    <div className="p-8 space-y-8">
+    <div className="p-8 space-y-8 animate-in fade-in">
       <div>
         <h1 className="text-3xl font-bold text-[#3E2723]">Pesanan Online</h1>
-        <p className="text-sm text-[#3E2723]/60 font-medium tracking-tight">Monitoring pesanan dari website (3am Collection)</p>
+        <p className="text-sm text-[#3E2723]/60">Pesanan masuk dari Website</p>
       </div>
-
       <div className="bg-white rounded-[2.5rem] border border-[#E5DCC5] shadow-sm overflow-hidden">
         <table className="w-full text-left">
-          <thead className="bg-gray-50/50 text-[10px] font-bold uppercase tracking-[0.2em] text-gray-400">
+          <thead className="bg-gray-50/50 text-[10px] font-bold uppercase tracking-widest text-gray-400">
             <tr>
-              <th className="px-10 py-8">STATUS & ID</th>
-              <th className="px-10 py-8">PELANGGAN</th>
-              <th className="px-10 py-8">LOKASI</th>
-              <th className="px-10 py-8 text-center">AKSI</th>
+              <th className="px-10 py-6">Status & ID</th>
+              <th className="px-10 py-6">Pelanggan</th>
+              <th className="px-10 py-6">Total</th>
+              <th className="px-10 py-6 text-center">Aksi</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {orders.map((order) => (
-              <tr key={order._id} className="group hover:bg-[#F9F5E8]/30 transition-colors">
-                <td className="px-10 py-8">
-                  <div className={`py-2 px-4 rounded-xl text-white text-[10px] font-black uppercase text-center inline-flex items-center gap-2 ${order.status === "Selesai" ? "bg-[#27AE60]" : "bg-[#E67E22]"}`}>
-                    <div className={`w-1.5 h-1.5 rounded-full bg-white ${order.status !== "Selesai" && "animate-pulse"}`} />
-                    {order.status || "Proses"}
-                  </div>
-                  <p className="font-mono text-[10px] text-gray-400 mt-2 ml-1">{order.id}</p>
-                </td>
-                <td className="px-10 py-8">
-                   <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center text-gray-300"><User size={18} /></div>
-                      <div>
-                        <p className="font-bold text-sm text-[#3E2723]">{order.customer}</p>
-                        <p className="text-[10px] text-gray-400">{order.phone}</p>
-                      </div>
-                   </div>
-                </td>
-                <td className="px-10 py-8">
-                  <div className="flex items-center gap-1 text-[10px] font-bold text-gray-400 uppercase">
-                    <MapPin size={12}/> {order.type}
-                  </div>
-                  <p className="text-[10px] text-gray-400 mt-1 truncate max-w-[150px]">{order.address}</p>
-                </td>
-                <td className="px-10 py-8">
-                  <div className="flex gap-4 justify-center">
-                    <button onClick={() => updateStatus(order._id, "Proses")} disabled={order.status === "Proses"} className="w-10 h-10 rounded-full flex items-center justify-center text-gray-300 hover:text-orange-500 border border-transparent hover:border-orange-100 transition-all disabled:opacity-20"><RotateCcw size={18}/></button>
-                    <button onClick={() => updateStatus(order._id, "Selesai")} disabled={order.status === "Selesai"} className="w-10 h-10 rounded-full bg-[#27AE60] flex items-center justify-center text-white hover:scale-110 shadow-lg transition-all disabled:opacity-30"><CheckCircle size={20}/></button>
-                  </div>
-                </td>
-              </tr>
-            ))}
+            {orders.length === 0 ? (
+                <tr><td colSpan={4} className="p-10 text-center text-gray-400">Belum ada pesanan online.</td></tr>
+            ) : (
+                orders.map((order) => (
+                <tr key={order._id} className="hover:bg-[#F9F5E8]/30">
+                    <td className="px-10 py-6">
+                        <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase ${order.status === "Selesai" ? "bg-green-100 text-green-700" : "bg-orange-100 text-orange-700"}`}>{order.status}</span>
+                        <p className="text-[10px] text-gray-400 mt-2 font-mono">{order.id}</p>
+                    </td>
+                    <td className="px-10 py-6">
+                        <p className="font-bold text-[#3E2723]">{order.customer}</p>
+                        <p className="text-[10px] text-gray-400">{order.type} • {order.items}</p>
+                    </td>
+                    <td className="px-10 py-6 font-bold text-[#3E2723]">Rp {order.total.toLocaleString()}</td>
+                    <td className="px-10 py-6 text-center flex justify-center gap-2">
+                        <button onClick={() => updateStatus(order._id, "Proses")} disabled={processingId === order._id} className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center hover:bg-orange-100 text-gray-500 hover:text-orange-600"><RotateCcw size={14}/></button>
+                        <button onClick={() => updateStatus(order._id, "Selesai")} disabled={processingId === order._id} className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center text-green-600 hover:bg-green-200"><CheckCircle size={14}/></button>
+                        <button onClick={() => deleteOrder(order._id)} disabled={processingId === order._id} className="w-8 h-8 rounded-full bg-red-50 flex items-center justify-center text-red-400 hover:bg-red-100"><Trash2 size={14}/></button>
+                    </td>
+                </tr>
+                ))
+            )}
           </tbody>
         </table>
       </div>

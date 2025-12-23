@@ -15,7 +15,8 @@ import {
   AnimatePresence 
 } from "framer-motion";
 
-// --- DATA PEMBAYARAN ---
+const ADMIN_WA = "6285180646816";
+
 const PAYMENT_INFO = {
   bankName: "BCA",
   accountNumber: "7275472760", 
@@ -23,7 +24,7 @@ const PAYMENT_INFO = {
   qrisImage: "/qris.jpg" 
 };
 
-// --- STYLE LOOKUP (Agar Data DB tetap memiliki UI/UX asli Anda) ---
+// --- STYLE LOOKUP ---
 const merchStyleLookup: Record<string, any> = {
   "Midnight Drip Tumbler": { bg: "bg-gradient-to-br from-[#1a1a1a] to-[#333333]", sticker: "NEW DROP", rotation: 2, textColor: "text-white" },
   "Noir Cup": { bg: "bg-gradient-to-br from-[#3E2723] to-[#5D4037]", sticker: "DAILY USE", rotation: -2, textColor: "text-[#F9F5E8]" },
@@ -33,7 +34,7 @@ const merchStyleLookup: Record<string, any> = {
   "3AM Coffe Cup": { bg: "bg-gradient-to-br from-[#3E2723] to-[#2B1B17]", sticker: "ESSENTIAL", rotation: 0, textColor: "text-white" }
 };
 
-// --- KOMPONEN KARTU 3D TILT ---
+// --- KOMPONEN KARTU ---
 const TiltCard = ({ item, onClick }: { item: any, onClick: () => void }) => {
   const x = useMotionValue(0);
   const y = useMotionValue(0);
@@ -65,14 +66,12 @@ const TiltCard = ({ item, onClick }: { item: any, onClick: () => void }) => {
       <div className="absolute bottom-0 left-0 w-24 h-24 bg-black/5 rounded-tr-full z-0" />
       
       <div style={{ transform: "translateZ(50px)" }} className="relative h-full flex flex-col justify-between z-10">
-        {/* Sticker */}
         <motion.div animate={{ y: [0, -5, 0] }} transition={{ repeat: Infinity, duration: 3, ease: "easeInOut" }}
           className="absolute -top-4 -right-4 bg-white text-[#3E2723] font-bold text-xs tracking-widest px-4 py-2 rounded-full border border-[#3E2723]/10 shadow-lg rotate-6 z-20"
         >
           {style.sticker}
         </motion.div>
 
-        {/* Product Image */}
         <div className="flex-grow flex items-center justify-center w-full relative">
            <div className="absolute w-40 h-40 bg-white/10 blur-[50px] rounded-full pointer-events-none" />
            <motion.div style={{ transform: "translateZ(80px)" }} className="relative w-56 h-56 md:w-72 md:h-72 drop-shadow-[0_20px_30px_rgba(0,0,0,0.4)]" whileHover={{ scale: 1.1, rotate: style.rotation * 3 }}>
@@ -80,7 +79,6 @@ const TiltCard = ({ item, onClick }: { item: any, onClick: () => void }) => {
           </motion.div>
         </div>
 
-        {/* Product Info Card */}
         <div style={{ transform: "translateZ(60px)" }} className={`w-full ${item.name.includes("Daylight") ? "bg-black/5 border-black/10" : "bg-white/10 border-white/20"} backdrop-blur-md border p-6 rounded-3xl mt-4 relative overflow-hidden group-hover:bg-white/20 transition-colors`}>
           <div>
             <p className={`text-[10px] font-bold tracking-[0.2em] uppercase mb-2 opacity-80 ${style.textColor}`}>{item.category}</p>
@@ -98,7 +96,6 @@ const TiltCard = ({ item, onClick }: { item: any, onClick: () => void }) => {
         </div>
       </div>
 
-      {/* OVERLAY STOK HABIS (DENGAN TRANSLATE-Z TERINGGI AGAR DI DEPAN FOTO) */}
       {item.stock <= 0 && (
         <div style={{ transform: "translateZ(150px)" }} className="absolute inset-0 z-[100] flex items-center justify-center pointer-events-none">
           <div className="absolute inset-0 bg-black/50 backdrop-blur-[3px] rounded-[2.5rem]" />
@@ -125,14 +122,15 @@ export default function MerchPageComplete() {
   const [showSuccess, setShowSuccess] = useState(false);
   const [qrisError, setQrisError] = useState(false);
   const [toast, setToast] = useState({ show: false, msg: "" });
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // --- AMBIL DATA DARI ADMIN (MONGODB) ---
+  // --- AMBIL DATA ---
   useEffect(() => {
     const fetchMerch = async () => {
       try {
         const res = await fetch("/api/products");
         const data = await res.json();
-        setProducts(data.filter((p: any) => p.category === "merch")); // Filter khusus merch
+        setProducts(data.filter((p: any) => p.category === "merch")); 
       } catch (err) {
         console.error("Gagal ambil data");
       } finally {
@@ -142,11 +140,25 @@ export default function MerchPageComplete() {
     fetchMerch();
   }, []);
 
+  // --- FUNGSI TAMBAH CART (DENGAN PROTEKSI STOK KETAT) ---
   const addToCart = (item: any) => {
+    // 1. Cek stok awal
     if (item.stock <= 0) return showToast("Stok Habis!");
+
+    // 2. Cek apakah barang sudah ada di cart
+    const existingItem = cart.find((i: any) => i.id === item.id || i._id === item._id);
+    const currentQtyInCart = existingItem ? existingItem.qty : 0;
+
+    // 3. VALIDASI: Jika (jumlah sekarang + 1) melebihi stok, batalkan.
+    if (currentQtyInCart + 1 > item.stock) {
+        return showToast(`Stok hanya tersisa ${item.stock}!`);
+    }
+
+    // 4. Update Cart
     setCart((prev) => {
-      const existing = prev.find((i: any) => i.id === item.id);
-      if (existing) return prev.map((i: any) => i.id === item.id ? { ...i, qty: i.qty + 1 } : i);
+      if (existingItem) {
+         return prev.map((i: any) => (i.id === item.id || i._id === item._id) ? { ...i, qty: i.qty + 1 } : i);
+      }
       return [...prev, { ...item, qty: 1 }];
     });
     setSelectedItem(null);
@@ -154,16 +166,88 @@ export default function MerchPageComplete() {
     setIsCartOpen(true);
   };
 
-  const updateQty = (id: number, delta: number) => {
-    setCart((prev) => prev.map((i) => i.id === id ? { ...i, qty: Math.max(1, i.qty + delta) } : i));
+  // --- FUNGSI UPDATE QTY (DENGAN PROTEKSI STOK KETAT) ---
+  const updateQty = (id: string, delta: number) => {
+    // Cari data produk asli (master) untuk cek stok
+    const product = products.find(p => p.id === id || p._id === id);
+    const cartItem = cart.find(i => i.id === id || i._id === id);
+
+    if (!product || !cartItem) return;
+
+    const newQty = cartItem.qty + delta;
+
+    // Validasi Minimum 1
+    if (newQty < 1) return;
+
+    // VALIDASI: Jika mau nambah (delta > 0) dan (qty baru > stok), batalkan
+    if (delta > 0 && newQty > product.stock) {
+        return showToast(`Maksimal stok tersedia: ${product.stock}`);
+    }
+
+    // Update State
+    setCart((prev) => prev.map((i) => {
+        if (i.id === id || i._id === id) {
+            return { ...i, qty: newQty };
+        }
+        return i;
+    }));
   };
 
-  const removeFromCart = (id: number) => {
-    setCart((prev) => prev.filter((i) => i.id !== id));
+  const removeFromCart = (id: string) => {
+    setCart((prev) => prev.filter((i) => i.id !== id && i._id !== id));
   };
 
   const totalItems = cart.reduce((acc, item) => acc + item.qty, 0);
   const totalPrice = cart.reduce((acc, item) => acc + (item.price * item.qty), 0);
+
+  // --- CHECKOUT ---
+  const handleCheckout = async () => {
+      if (cart.length === 0) return;
+      setIsSubmitting(true);
+
+      const cartItemsForBackend: { [key: string]: number } = {};
+      cart.forEach(item => {
+          const itemId = item._id || item.id;
+          cartItemsForBackend[itemId] = item.qty;
+      });
+
+      const orderData = {
+          customer: "Pembeli Merch (Guest)", 
+          phone: "-", 
+          address: "Ambil di Outlet / Dikirim",
+          items: cart.map(i => `${i.name} (${i.qty}x)`).join(", "),
+          total: totalPrice,
+          type: "Merch",
+          cartItems: cartItemsForBackend 
+      };
+
+      try {
+          const res = await fetch("/api/orders", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(orderData)
+          });
+
+          if (res.ok) {
+              const itemsListWA = cart.map(item => `- ${item.name} (${item.qty}x)`).join("\n");
+              const waMessage = `*ORDER MERCHANDISE*\n--------------------------------\n` +
+                                `TOTAL: Rp ${totalPrice.toLocaleString('id-ID')}\n\n` +
+                                `*DETAIL PESANAN:*\n${itemsListWA}\n\n` +
+                                `Mohon konfirmasi pembayaran. Terima kasih!`;
+              
+              window.open(`https://wa.me/${ADMIN_WA}?text=${encodeURIComponent(waMessage)}`, '_blank');
+              setShowPayment(false);
+              setShowSuccess(true);
+              setCart([]);
+          } else {
+              showToast("Gagal memproses pesanan.");
+          }
+      } catch (error) {
+          showToast("Terjadi kesalahan koneksi.");
+      } finally {
+          setIsSubmitting(false);
+      }
+  };
 
   const showToast = (msg: string) => {
     setToast({ show: true, msg });
@@ -179,6 +263,14 @@ export default function MerchPageComplete() {
 
   return (
     <div className="min-h-screen bg-[#F9F5E8] font-body text-[#3E2723] overflow-x-hidden">
+      <AnimatePresence>
+          {toast.show && (
+              <motion.div initial={{ y: -50, opacity: 0 }} animate={{ y: 20, opacity: 1 }} exit={{ y: -50, opacity: 0 }} className="fixed top-0 left-1/2 -translate-x-1/2 z-[150] bg-[#3E2723] text-white px-6 py-3 rounded-full shadow-xl font-bold text-sm flex items-center gap-2">
+                  <CheckCircle size={16} /> {toast.msg}
+              </motion.div>
+          )}
+      </AnimatePresence>
+
       <style jsx global>{`
         @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Karla:wght@400;500;700&display=swap');
         .font-display { font-family: 'DM Serif Display', serif; }
@@ -212,7 +304,7 @@ export default function MerchPageComplete() {
         </section>
         <section className="container mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10 lg:gap-16">
           {products.map((item) => (
-            <div key={item.id} className="perspective-1000"><TiltCard item={item} onClick={() => setSelectedItem(item)} /></div>
+            <div key={item._id || item.id} className="perspective-1000"><TiltCard item={item} onClick={() => setSelectedItem(item)} /></div>
           ))}
         </section>
       </main>
@@ -228,14 +320,17 @@ export default function MerchPageComplete() {
                 <h2 className="font-display text-5xl md:text-6xl font-bold mb-4">{selectedItem.name}</h2>
                 <p className="text-3xl mb-8 font-body">Rp {selectedItem.price.toLocaleString('id-ID')}</p>
                 <p className="text-lg opacity-80 mb-10 leading-relaxed">"{selectedItem.desc || 'Produk Eksklusif 3.AM'}"</p>
-                <button onClick={() => addToCart(selectedItem)} className="w-full py-5 rounded-2xl font-bold text-lg bg-[#F9F5E8] text-[#3E2723] hover:bg-white shadow-lg transition-all"><ShoppingBag size={20} /> Masukkan Keranjang</button>
+                
+                <button onClick={() => addToCart(selectedItem)} className="w-full py-5 rounded-2xl font-bold text-lg bg-[#F9F5E8] text-[#3E2723] hover:bg-white shadow-lg transition-all flex items-center justify-center gap-3">
+                    <ShoppingBag size={20} /> Masukkan Keranjang
+                </button>
+
               </div>
             </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Cart Sidebar */}
       <AnimatePresence>
         {isCartOpen && (
           <>
@@ -244,14 +339,14 @@ export default function MerchPageComplete() {
                 <div className="p-6 border-b border-[#E5DCC5] flex justify-between items-center bg-white"><h2 className="font-display text-xl font-bold text-[#3E2723]">Keranjang Belanja</h2><button onClick={() => setIsCartOpen(false)}><X size={20} /></button></div>
                 <div className="flex-1 overflow-y-auto p-6 space-y-4">
                   {cart.length === 0 ? <div className="text-center mt-20 opacity-40 font-bold">Keranjang kosong</div> : cart.map((item) => (
-                    <div key={item.id} className="flex gap-4 bg-white p-3 rounded-2xl border shadow-sm">
+                    <div key={item.id || item._id} className="flex gap-4 bg-white p-3 rounded-2xl border shadow-sm">
                       <div className="w-20 h-20 bg-[#F9F5E8] rounded-xl relative flex-shrink-0 border"><Image src={item.img} alt={item.name} fill className="object-contain p-2" /></div>
                       <div className="flex-1">
                         <h4 className="font-display font-bold text-[#3E2723] text-sm mb-1">{item.name}</h4>
                         <p className="text-xs text-[#8D6E63] font-bold">Rp {item.price.toLocaleString('id-ID')}</p>
                         <div className="flex justify-between items-center mt-2">
-                          <div className="flex items-center bg-[#F9F5E8] rounded-lg border px-2 py-1"><button onClick={() => updateQty(item.id, -1)} className="px-3 py-1"><Minus size={12}/></button><span className="w-8 text-center text-xs font-bold">{item.qty}</span><button onClick={() => updateQty(item.id, 1)} className="px-3 py-1"><Plus size={12}/></button></div>
-                          <button onClick={() => removeFromCart(item.id)} className="text-red-500"><Trash2 size={16}/></button>
+                          <div className="flex items-center bg-[#F9F5E8] rounded-lg border px-2 py-1"><button onClick={() => updateQty(item.id || item._id, -1)} className="px-3 py-1"><Minus size={12}/></button><span className="w-8 text-center text-xs font-bold">{item.qty}</span><button onClick={() => updateQty(item.id || item._id, 1)} className="px-3 py-1"><Plus size={12}/></button></div>
+                          <button onClick={() => removeFromCart(item.id || item._id)} className="text-red-500"><Trash2 size={16}/></button>
                         </div>
                       </div>
                     </div>
@@ -263,7 +358,6 @@ export default function MerchPageComplete() {
         )}
       </AnimatePresence>
 
-      {/* Payment Modal with QRIS */}
       {showPayment && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[#3E2723]/60 backdrop-blur-sm" onClick={() => setShowPayment(false)}>
            <div className="bg-[#F9F5E8] w-full max-w-sm rounded-[2rem] p-8 shadow-2xl relative border border-[#E5DCC5]" onClick={e => e.stopPropagation()}>
@@ -275,18 +369,19 @@ export default function MerchPageComplete() {
                   {!qrisError ? <Image src={PAYMENT_INFO.qrisImage} alt="QRIS" fill className="object-contain p-2" onError={() => setQrisError(true)} /> : <QrCode size={48} className="text-gray-200" />}
                 </div>
               </div>
-              <button onClick={() => { setShowPayment(false); setShowSuccess(true); }} className="w-full bg-[#3E2723] text-white py-3 rounded-xl font-bold uppercase tracking-widest shadow-lg hover:bg-[#5D4037]">Konfirmasi Bayar</button>
+              <button onClick={handleCheckout} disabled={isSubmitting} className="w-full bg-[#3E2723] text-white py-3 rounded-xl font-bold uppercase tracking-widest shadow-lg hover:bg-[#5D4037] disabled:opacity-50">
+                {isSubmitting ? "Memproses..." : "Konfirmasi Bayar"}
+              </button>
            </div>
         </div>
       )}
 
-      {/* Success Modal */}
       {showSuccess && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[#3E2723]/70 backdrop-blur-md">
            <div className="bg-[#F9F5E8] w-full max-w-sm p-8 text-center rounded-[2.5rem] shadow-2xl border border-[#E5DCC5]">
               <div className="w-20 h-20 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-6 animate-bounce"><CheckCircle size={40} /></div>
               <h2 className="font-display text-2xl font-bold mb-2">Pesanan Diterima!</h2>
-              <button onClick={() => { setCart([]); setShowSuccess(false); }} className="w-full bg-[#3E2723] text-white py-3 rounded-xl font-bold uppercase tracking-widest shadow-lg">Belanja Lagi</button>
+              <button onClick={() => { setShowSuccess(false); }} className="w-full bg-[#3E2723] text-white py-3 rounded-xl font-bold uppercase tracking-widest shadow-lg">Belanja Lagi</button>
            </div>
         </div>
       )}

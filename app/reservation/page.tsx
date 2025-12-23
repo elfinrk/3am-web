@@ -6,52 +6,45 @@ import Link from "next/link";
 import { 
   Calendar, Clock, Users, User, Phone, CheckCircle2, 
   Sparkles, Coffee, MapPin, ArrowRight, Plus, Minus, 
-  ShoppingBag, Leaf, Bean, ArrowLeft, ExternalLink 
+  ShoppingBag, Leaf, Bean, ArrowLeft, ExternalLink, Loader2
 } from "lucide-react";
 import { motion } from "framer-motion";
 
-// --- 1. DATA MENU LENGKAP (18 ITEM SESUAI GAMBAR) ---
-const MENU_ITEMS = [
-  // Kopi & Minuman
-  { id: 1, name: "Midnight Black Swirl", price: 28000 },
-  { id: 2, name: "Caramel Nightfall", price: 32000 },
-  { id: 3, name: "Moonlit Matcha", price: 30000 },
-  { id: 4, name: "Americano", price: 28000 },
-  { id: 5, name: "Caffe Latte", price: 35000 },
-  { id: 6, name: "Cappuccino", price: 32000 },
-  { id: 7, name: "Frappe Coffee", price: 40000 },
-  { id: 8, name: "Caramel Macchiato", price: 42000 },
-  { id: 9, name: "Coffee Milk", price: 33000 },
-  { id: 10, name: "Cookies & Cream", price: 35000 },
-  { id: 11, name: "Strawberry Mix", price: 35000 },
-  { id: 12, name: "Chocolate Frappe", price: 38000 },
-  // Makanan
-  { id: 13, name: "3AM Cheesemelt", price: 25000 },
-  { id: 14, name: "Butter Croissant", price: 18000 },
-  { id: 15, name: "Tomato Tart", price: 22000 },
-  { id: 16, name: "Macaron", price: 15000 },
-  // Dessert
-  { id: 17, name: "Strawberry Cheese Cake", price: 40000 },
-  { id: 18, name: "Chocolate Lava Cake", price: 40000 },
-];
-
 const MINIMUM_SPEND = 100000;
+const ADMIN_WA = "6285180646816"; 
 
 export default function ReservationPage() {
   const router = useRouter();
+  const [mounted, setMounted] = useState(false);
+  
+  // State Data & UI
+  const [menuItems, setMenuItems] = useState<any[]>([]);
+  const [isLoadingMenu, setIsLoadingMenu] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
-  const [mounted, setMounted] = useState(false);
 
   // State Form & Cart
-  const [formData, setFormData] = useState({ name: "", phone: "", date: "", time: "", guests: "2" });
-  const [cart, setCart] = useState<{[key: number]: number}>({});
+  const [formData, setFormData] = useState({ name: "", phone: "", date: "", time: "", guests: "" });
+  const [cart, setCart] = useState<{[key: string]: number}>({});
 
-  useEffect(() => setMounted(true), []);
+  // 1. AMBIL DATA MENU REAL-TIME DARI DATABASE
+  useEffect(() => {
+    setMounted(true);
+    fetch("/api/products")
+      .then((res) => res.json())
+      .then((data) => {
+        setMenuItems(data);
+        setIsLoadingMenu(false);
+      })
+      .catch((err) => {
+        console.error("Gagal memuat menu:", err);
+        setIsLoadingMenu(false);
+      });
+  }, []);
 
-  // Hitung Total
+  // Hitung Total Belanja
   const currentTotal = Object.entries(cart).reduce((total, [id, qty]) => {
-    const item = MENU_ITEMS.find(m => m.id === parseInt(id));
+    const item = menuItems.find(m => m._id === id);
     return total + (item ? item.price * qty : 0);
   }, 0);
 
@@ -64,9 +57,21 @@ export default function ReservationPage() {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  const updateCart = (id: number, delta: number) => {
+  // Update Cart dengan Cek Stok (LOGIC UPDATE)
+  const updateCart = (id: string, delta: number) => {
+    const item = menuItems.find(m => m._id === id);
+    if (!item) return;
+
+    const currentQty = cart[id] || 0;
+
+    // Cek Stok: Cegah penambahan jika stok habis
+    if (delta > 0 && currentQty >= item.stock) {
+      alert(`Stok ${item.name} hanya tersisa ${item.stock}!`);
+      return;
+    }
+
     setCart(prev => {
-      const newQty = (prev[id] || 0) + delta;
+      const newQty = currentQty + delta;
       if (newQty <= 0) { const { [id]: _, ...rest } = prev; return rest; }
       return { ...prev, [id]: newQty };
     });
@@ -76,10 +81,61 @@ export default function ReservationPage() {
     e.preventDefault();
     if (!isMinSpendMet) return;
     setIsSubmitting(true);
-    // Simulasi API call
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    setIsSubmitting(false);
-    setIsSuccess(true);
+
+    const bookingId = `BOOK-${Math.floor(1000 + Math.random() * 9000)}`;
+
+    // Format detail menu string
+    const menuDetails = Object.entries(cart).map(([id, qty]) => {
+        const item = menuItems.find(m => m._id === id);
+        return `${item?.name} (${qty}x)`;
+    }).join(", ");
+
+    const reservationData = {
+        id: bookingId,
+        customer: formData.name,
+        phone: formData.phone,
+        date: formData.date,
+        time: formData.time,
+        pax: formData.guests,
+        orderedMenu: menuDetails || "Tidak ada pre-order",
+        
+        // --- TAMBAHAN PENTING: Kirim data cart agar stok berkurang ---
+        cartItems: cart, 
+        
+        totalMenuCost: currentTotal,
+        type: "Reservasi"
+    };
+
+    try {
+        // 1. Simpan ke Database
+        const res = await fetch("/api/reservations", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(reservationData)
+        });
+
+        if (res.ok) {
+            // 2. Kirim ke WhatsApp
+            const waMessage = `*RESERVASI BARU (${bookingId})*\n\n` +
+            `👤 Nama: ${formData.name}\n` +
+            `📞 WA: ${formData.phone}\n` +
+            `📅 Tanggal: ${formData.date}\n` +
+            `⏰ Jam: ${formData.time}\n` +
+            `👥 Orang: ${formData.guests}\n\n` +
+            `*Pre-Order Menu:*\n${menuDetails || "-"}\n` +
+            `💰 Total: Rp ${currentTotal.toLocaleString()}\n\n` +
+            `Mohon konfirmasi ketersediaan tempat. Terima kasih.`;
+    
+            window.open(`https://wa.me/${ADMIN_WA}?text=${encodeURIComponent(waMessage)}`, '_blank');
+            setIsSuccess(true);
+        } else {
+            alert("Gagal menyimpan reservasi. Coba lagi.");
+        }
+    } catch (err) {
+        alert("Terjadi kesalahan koneksi.");
+    } finally {
+        setIsSubmitting(false);
+    }
   };
 
   // --- VISUAL ELEMENTS CONFIG ---
@@ -98,22 +154,17 @@ export default function ReservationPage() {
       
       {/* ================= LAYER BACKGROUND ================= */}
       <div className="absolute inset-0 z-0">
-         {/* Gambar Background samar */}
          <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1509042239860-f550ce710b93?q=80&w=1920&auto=format&fit=crop')] bg-cover bg-center opacity-[0.12] grayscale hue-rotate-15"></div>
-         {/* Gradient Overlay */}
          <div className="absolute inset-0 bg-gradient-to-b from-[#F3EDE2]/95 via-[#F3EDE2]/80 to-[#EFE5D5]"></div>
       </div>
       
-      {/* Noise Texture Overlay */}
       <div className="absolute inset-0 z-0 pointer-events-none opacity-[0.15] mix-blend-overlay"
         style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")` }}
       ></div>
 
-      {/* Orbs / Cahaya Blur */}
       <div className="absolute top-1/4 right-[-10%] w-[600px] h-[600px] bg-orange-300/30 rounded-full blur-[150px] -z-10 animate-pulse-slow"></div>
       <div className="absolute bottom-[-10%] left-[-10%] w-[500px] h-[500px] bg-yellow-600/20 rounded-full blur-[130px] -z-10 animate-pulse-slow delay-1000"></div>
       
-      {/* Floating Icons Animation */}
       {floatingElements.map((item, index) => (
         <motion.div
           key={index}
@@ -129,7 +180,6 @@ export default function ReservationPage() {
       {/* ================= MAIN CONTENT ================= */}
       <div className="max-w-6xl w-full relative z-10 space-y-8">
         
-        {/* BUTTON KEMBALI KE HOME */}
         <motion.div 
           initial={{ opacity: 0, x: -20 }} 
           animate={{ opacity: 1, x: 0 }}
@@ -160,52 +210,64 @@ export default function ReservationPage() {
               </p>
             </motion.div>
 
-            {/* Glassmorphism Form Container */}
             <div className="bg-white/60 backdrop-blur-xl rounded-[2.5rem] p-8 md:p-10 shadow-2xl shadow-[#3E2723]/10 border border-white/50 relative overflow-hidden">
               <Leaf className="absolute -top-10 -right-10 text-[#3E2723]/5 w-32 h-32 rotate-45 pointer-events-none"/>
               
               {isSuccess ? (
-                 <motion.div initial={{scale:0.9}} animate={{scale:1}} className="text-center py-10 relative z-10">
-                   <div className="w-24 h-24 bg-gradient-to-br from-green-500 to-green-700 rounded-full flex items-center justify-center mx-auto mb-6 text-white shadow-lg shadow-green-200/50">
-                     <CheckCircle2 size={48} />
-                   </div>
-                   <h2 className="text-3xl font-bold mb-3">Reservasi Berhasil!</h2>
-                   <p className="mb-8 text-[#6A4A38]">Pre-order senilai <strong>Rp {currentTotal.toLocaleString()}</strong> telah dikonfirmasi. Sampai jumpa!</p>
-                   <button onClick={() => router.push("/")} className="px-8 py-3 bg-[#3E2723]/5 rounded-full text-[#3E2723] font-bold hover:bg-[#3E2723] hover:text-white transition-all">Kembali ke Home</button>
-                 </motion.div>
+                  <motion.div initial={{scale:0.9}} animate={{scale:1}} className="text-center py-10 relative z-10">
+                    <div className="w-24 h-24 bg-gradient-to-br from-green-500 to-green-700 rounded-full flex items-center justify-center mx-auto mb-6 text-white shadow-lg shadow-green-200/50">
+                      <CheckCircle2 size={48} />
+                    </div>
+                    <h2 className="text-3xl font-bold mb-3">Reservasi Berhasil!</h2>
+                    <p className="mb-8 text-[#6A4A38]">Pre-order senilai <strong>Rp {currentTotal.toLocaleString()}</strong> telah dikonfirmasi dan pesan WhatsApp telah disiapkan.</p>
+                    <button onClick={() => router.push("/")} className="px-8 py-3 bg-[#3E2723]/5 rounded-full text-[#3E2723] font-bold hover:bg-[#3E2723] hover:text-white transition-all">Kembali ke Home</button>
+                  </motion.div>
               ) : (
                 <form id="reservationForm" onSubmit={handleSubmit} className="space-y-6 relative z-10">
-                   <div className="grid md:grid-cols-2 gap-5">
-                    <div className="space-y-2">
-                      <label className="text-xs font-bold uppercase ml-3 opacity-60 tracking-wider">Nama Lengkap</label>
-                      <div className="relative group"><User className="absolute left-5 top-1/2 -translate-y-1/2 text-[#3E2723]/30 group-focus-within:text-[#3E2723] transition-colors" size={18} />
-                      <input type="text" name="name" required value={formData.name} onChange={handleChange} className="w-full bg-white/70 focus:bg-white p-4 pl-12 rounded-2xl outline-none border border-white focus:border-[#3E2723]/10 transition-all shadow-sm placeholder:text-[#3E2723]/30 font-medium" placeholder="Nama Anda" /></div>
+                    <div className="grid md:grid-cols-2 gap-5">
+                     <div className="space-y-2">
+                       <label className="text-xs font-bold uppercase ml-3 opacity-60 tracking-wider">Nama Lengkap</label>
+                       <div className="relative group"><User className="absolute left-5 top-1/2 -translate-y-1/2 text-[#3E2723]/30 group-focus-within:text-[#3E2723] transition-colors" size={18} />
+                       <input type="text" name="name" required value={formData.name} onChange={handleChange} className="w-full bg-white/70 focus:bg-white p-4 pl-12 rounded-2xl outline-none border border-white focus:border-[#3E2723]/10 transition-all shadow-sm placeholder:text-[#3E2723]/30 font-medium" placeholder="Nama Anda" /></div>
+                     </div>
+                     <div className="space-y-2">
+                       <label className="text-xs font-bold uppercase ml-3 opacity-60 tracking-wider">WhatsApp</label>
+                       <div className="relative group"><Phone className="absolute left-5 top-1/2 -translate-y-1/2 text-[#3E2723]/30 group-focus-within:text-[#3E2723] transition-colors" size={18} />
+                       <input type="tel" name="phone" required value={formData.phone} onChange={handleChange} className="w-full bg-white/70 focus:bg-white p-4 pl-12 rounded-2xl outline-none border border-white focus:border-[#3E2723]/10 transition-all shadow-sm placeholder:text-[#3E2723]/30 font-medium" placeholder="08..." /></div>
+                     </div>
                     </div>
-                    <div className="space-y-2">
-                      <label className="text-xs font-bold uppercase ml-3 opacity-60 tracking-wider">WhatsApp</label>
-                      <div className="relative group"><Phone className="absolute left-5 top-1/2 -translate-y-1/2 text-[#3E2723]/30 group-focus-within:text-[#3E2723] transition-colors" size={18} />
-                      <input type="tel" name="phone" required value={formData.phone} onChange={handleChange} className="w-full bg-white/70 focus:bg-white p-4 pl-12 rounded-2xl outline-none border border-white focus:border-[#3E2723]/10 transition-all shadow-sm placeholder:text-[#3E2723]/30 font-medium" placeholder="08..." /></div>
+                    <div className="grid grid-cols-3 gap-5">
+                      <div className="space-y-2 col-span-3 md:col-span-1">
+                        <label className="text-xs font-bold uppercase ml-3 opacity-60 tracking-wider">Tanggal</label>
+                        <div className="relative"><Calendar className="absolute right-4 top-1/2 -translate-y-1/2 text-[#3E2723]/30 pointer-events-none" size={18} />
+                        <input type="date" name="date" required value={formData.date} onChange={handleChange} className="w-full bg-white/70 focus:bg-white p-4 rounded-2xl outline-none border border-white focus:border-[#3E2723]/10 transition-all shadow-sm font-medium text-sm cursor-pointer" /></div>
+                      </div>
+                      <div className="space-y-2 col-span-3 md:col-span-1">
+                         <label className="text-xs font-bold uppercase ml-3 opacity-60 tracking-wider">Jam</label>
+                         <div className="relative"><Clock className="absolute right-4 top-1/2 -translate-y-1/2 text-[#3E2723]/30 pointer-events-none" size={18} />
+                         <input type="time" name="time" required value={formData.time} onChange={handleChange} className="w-full bg-white/70 focus:bg-white p-4 rounded-2xl outline-none border border-white focus:border-[#3E2723]/10 transition-all shadow-sm font-medium text-sm cursor-pointer" /></div>
+                      </div>
+
+                      {/* --- MODIFIKASI: Input Tamu Bebas Angka --- */}
+                      <div className="space-y-2 col-span-3 md:col-span-1">
+                         <label className="text-xs font-bold uppercase ml-3 opacity-60 tracking-wider">Tamu (Orang)</label>
+                         <div className="relative">
+                           <Users className="absolute right-4 top-1/2 -translate-y-1/2 text-[#3E2723]/30 pointer-events-none" size={18} />
+                           <input 
+                             type="number" 
+                             name="guests" 
+                             required 
+                             min="1"
+                             placeholder="Jml Orang"
+                             value={formData.guests} 
+                             onChange={handleChange} 
+                             className="w-full bg-white/70 focus:bg-white p-4 rounded-2xl outline-none border border-white focus:border-[#3E2723]/10 transition-all shadow-sm font-medium text-sm pl-4" 
+                           />
+                         </div>
+                      </div>
+                      {/* ------------------------------------------ */}
+
                     </div>
-                   </div>
-                   <div className="grid grid-cols-3 gap-5">
-                     <div className="space-y-2 col-span-3 md:col-span-1">
-                       <label className="text-xs font-bold uppercase ml-3 opacity-60 tracking-wider">Tanggal</label>
-                       <div className="relative"><Calendar className="absolute right-4 top-1/2 -translate-y-1/2 text-[#3E2723]/30 pointer-events-none" size={18} />
-                       <input type="date" name="date" required value={formData.date} onChange={handleChange} className="w-full bg-white/70 focus:bg-white p-4 rounded-2xl outline-none border border-white focus:border-[#3E2723]/10 transition-all shadow-sm font-medium text-sm cursor-pointer" /></div>
-                     </div>
-                     <div className="space-y-2 col-span-3 md:col-span-1">
-                        <label className="text-xs font-bold uppercase ml-3 opacity-60 tracking-wider">Jam</label>
-                        <div className="relative"><Clock className="absolute right-4 top-1/2 -translate-y-1/2 text-[#3E2723]/30 pointer-events-none" size={18} />
-                        <input type="time" name="time" required value={formData.time} onChange={handleChange} className="w-full bg-white/70 focus:bg-white p-4 rounded-2xl outline-none border border-white focus:border-[#3E2723]/10 transition-all shadow-sm font-medium text-sm cursor-pointer" /></div>
-                     </div>
-                     <div className="space-y-2 col-span-3 md:col-span-1">
-                        <label className="text-xs font-bold uppercase ml-3 opacity-60 tracking-wider">Tamu</label>
-                        <div className="relative"><Users className="absolute right-4 top-1/2 -translate-y-1/2 text-[#3E2723]/30 pointer-events-none" size={18} />
-                        <select name="guests" value={formData.guests} onChange={handleChange} className="w-full bg-white/70 focus:bg-white p-4 rounded-2xl outline-none border border-white focus:border-[#3E2723]/10 transition-all shadow-sm font-medium text-sm appearance-none cursor-pointer pl-5">
-                          <option value="2">2 Orang</option> <option value="4">4 Orang</option> <option value="6">6+ Orang</option>
-                        </select></div>
-                     </div>
-                   </div>
                 </form>
               )}
             </div>
@@ -251,13 +313,13 @@ export default function ReservationPage() {
                     className="w-full py-5 rounded-2xl font-bold text-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center gap-3 shadow-lg hover:shadow-xl hover:-translate-y-1 relative overflow-hidden group bg-[#F3EDE2] text-[#3E2723]"
                   >
                     <span className="relative z-10 flex items-center gap-2">
-                      {isSubmitting ? "Memproses..." : (isMinSpendMet ? <>Konfirmasi Reservasi <ArrowRight size={20} className="group-hover:translate-x-1 transition-transform"/></> : "Penuhi Minimum Order")}
+                      {isSubmitting ? <><Loader2 className="animate-spin" /> Memproses...</> : (isMinSpendMet ? <>Konfirmasi Reservasi <ArrowRight size={20} className="group-hover:translate-x-1 transition-transform"/></> : "Penuhi Minimum Order")}
                     </span>
                   </button>
                 </div>
               </motion.div>
 
-              {/* Menu List Container */}
+              {/* Menu List Container (DYNAMIC DB) */}
               <div className="bg-white/50 backdrop-blur-xl rounded-[2.5rem] p-1 border border-white/60 shadow-lg shadow-[#3E2723]/5 overflow-hidden relative">
                  <div className="bg-[#3E2723]/5 px-6 py-4 flex items-center justify-between rounded-t-[2.4rem]">
                     <div className="flex items-center gap-2">
@@ -265,7 +327,6 @@ export default function ReservationPage() {
                        <h3 className="font-bold text-[#3E2723] text-sm uppercase tracking-wider">Add Menu Items</h3>
                     </div>
                     
-                    {/* --- TOMBOL FULL MENU (BUTTON STYLE) --- */}
                     <Link 
                       href="/menu" 
                       target="_blank" 
@@ -276,19 +337,35 @@ export default function ReservationPage() {
                  </div>
                  
                  <div className="p-4 max-h-[400px] overflow-y-auto scrollbar-hide space-y-3">
-                   {MENU_ITEMS.map((item) => (
-                     <div key={item.id} className="bg-white/80 p-4 rounded-[1.5rem] flex justify-between items-center shadow-sm border border-transparent hover:border-[#3E2723]/10 transition-all group">
-                       <div>
-                         <h4 className="font-bold text-[#3E2723] leading-tight group-hover:text-orange-800 transition-colors">{item.name}</h4>
-                         <p className="text-xs text-[#6A4A38]/70 font-medium">Rp {item.price.toLocaleString()}</p>
+                   {isLoadingMenu ? (
+                     <div className="flex justify-center py-10"><Loader2 className="animate-spin text-[#3E2723]" /></div>
+                   ) : (
+                     menuItems.map((item) => (
+                       <div key={item._id} className={`bg-white/80 p-4 rounded-[1.5rem] flex justify-between items-center shadow-sm border border-transparent hover:border-[#3E2723]/10 transition-all group ${item.stock <= 0 ? "opacity-60 grayscale" : ""}`}>
+                         <div className="flex-1">
+                           <h4 className="font-bold text-[#3E2723] leading-tight group-hover:text-orange-800 transition-colors">{item.name}</h4>
+                           <div className="flex items-center gap-2 mt-1">
+                             <p className="text-xs text-[#6A4A38]/70 font-medium">Rp {item.price.toLocaleString()}</p>
+                             {item.stock <= 0 ? (
+                               <span className="text-[9px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full font-bold">HABIS</span>
+                             ) : item.stock < 10 && (
+                               <span className="text-[9px] text-orange-600 font-bold">Sisa {item.stock}</span>
+                             )}
+                           </div>
+                         </div>
+                         
+                         {item.stock > 0 ? (
+                           <div className="flex items-center gap-1 bg-[#F3EDE2] rounded-xl p-1.5 border border-[#3E2723]/5">
+                             <button onClick={() => updateCart(item._id, -1)} className="w-8 h-8 flex items-center justify-center bg-white rounded-lg shadow-sm text-[#3E2723] hover:bg-red-50 hover:text-red-700 disabled:opacity-50 transition-colors" disabled={!cart[item._id]}><Minus size={16} /></button>
+                             <span className="font-bold w-6 text-center text-sm">{cart[item._id] || 0}</span>
+                             <button onClick={() => updateCart(item._id, 1)} className="w-8 h-8 flex items-center justify-center bg-[#3E2723] text-white rounded-lg shadow-sm hover:bg-[#5D4037] transition-colors"><Plus size={16} /></button>
+                           </div>
+                         ) : (
+                           <div className="text-[10px] font-bold text-gray-400 bg-gray-100 px-3 py-2 rounded-lg">SOLD OUT</div>
+                         )}
                        </div>
-                       <div className="flex items-center gap-1 bg-[#F3EDE2] rounded-xl p-1.5 border border-[#3E2723]/5">
-                         <button onClick={() => updateCart(item.id, -1)} className="w-8 h-8 flex items-center justify-center bg-white rounded-lg shadow-sm text-[#3E2723] hover:bg-red-50 hover:text-red-700 disabled:opacity-50 transition-colors" disabled={!cart[item.id]}><Minus size={16} /></button>
-                         <span className="font-bold w-6 text-center text-sm">{cart[item.id] || 0}</span>
-                         <button onClick={() => updateCart(item.id, 1)} className="w-8 h-8 flex items-center justify-center bg-[#3E2723] text-white rounded-lg shadow-sm hover:bg-[#5D4037] transition-colors"><Plus size={16} /></button>
-                       </div>
-                     </div>
-                   ))}
+                     ))
+                   )}
                  </div>
               </div>
             </div>
@@ -296,7 +373,6 @@ export default function ReservationPage() {
         </div>
       </div>
       
-      {/* CSS untuk menyembunyikan scrollbar tapi tetap bisa di-scroll */}
       <style jsx global>{`
         .scrollbar-hide::-webkit-scrollbar {
             display: none;
