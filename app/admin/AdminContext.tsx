@@ -25,7 +25,7 @@ interface Order {
   createdAt: string;
 }
 
-// --- BAGIAN INI YANG MENYEBABKAN ERROR JIKA HILANG ---
+// 👇👇👇 BAGIAN INI YANG MENYEBABKAN ERROR BUILD 👇👇👇
 interface AdminContextType {
   products: Product[];
   orders: Order[];
@@ -33,10 +33,12 @@ interface AdminContextType {
   donationBalance: number;
   isLoading: boolean;
   
-  // Actions
-  refreshData: () => Promise<void>; // <--- WAJIB ADA INI
+  // ANDA WAJIB MENULISKAN DEFINISI TIPE DISINI AGAR TYPESCRIPT TIDAK MARAH
+  refreshData: () => Promise<void>; 
+  
   updateProduct: (id: number | string, newData: { price?: number; stock?: number }) => void;
 }
+// 👆👆👆 PASTIKAN BAGIAN INI ADA 👆👆👆
 
 const AdminContext = createContext<AdminContextType | undefined>(undefined);
 
@@ -120,7 +122,7 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
         reservations,
         donationBalance,
         isLoading,
-        refreshData, // <--- WAJIB DI-EXPORT DISINI
+        refreshData, // <--- JANGAN LUPA EXPORT DISINI JUGA
         updateProduct
       }}
     >
