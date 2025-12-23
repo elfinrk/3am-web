@@ -32,9 +32,8 @@ interface AdminContextType {
   donationBalance: number;
   isLoading: boolean;
   
-  // Definisi Fungsi refreshData WAJIB ADA DISINI
+  // Fungsi refreshData
   refreshData: () => Promise<void>; 
-  
   updateProduct: (id: number | string, newData: { price?: number; stock?: number }) => void;
 }
 
@@ -44,10 +43,10 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
   const [products, setProducts] = useState<Product[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   
-  // --- PERBAIKAN UTAMA DISINI ---
-  // Kita tambahkan <any[]> agar TypeScript tahu ini boleh diisi data apa saja
+  // 👇👇👇 PERBAIKAN UTAMA: Tambahkan <any[]> 👇👇👇
   const [reservations, setReservations] = useState<any[]>([]); 
-  
+  // 👆👆👆 INI YANG BIKIN ERROR HILANG 👆👆👆
+
   const [donationBalance, setDonationBalance] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -68,7 +67,8 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
 
       const resReservasi = await fetch("/api/reservations");
       const dataReservasi = await resReservasi.json();
-      // Sekarang aman karena tipe datanya sudah any[]
+      
+      // Karena sudah any[], baris ini jadi AMAN
       if (Array.isArray(dataReservasi)) setReservations(dataReservasi);
 
     } catch (err) {
@@ -91,12 +91,10 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
     return () => clearInterval(interval);
   }, [fetchAllData]);
 
-  // --- ACTION: REFRESH MANUAL ---
   const refreshData = async () => {
     await fetchAllData();
   };
 
-  // --- ACTION: UPDATE PRODUK ---
   const updateProduct = async (id: number | string, newData: { price?: number; stock?: number }) => {
     setProducts((prev) => 
       prev.map((p) => {
@@ -125,7 +123,7 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
         reservations,
         donationBalance,
         isLoading,
-        refreshData, // <--- WAJIB DI-EXPORT DISINI
+        refreshData, 
         updateProduct
       }}
     >
