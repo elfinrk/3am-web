@@ -1,10 +1,11 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
 
 // --- INTERFACES ---
 interface Product {
-  id: number;
+  id: number | string; // Support number (seed) & string (MongoDB _id)
+  _id?: string;
   name: string;
   price: number;
   stock: number;
@@ -13,95 +14,127 @@ interface Product {
   desc?: string;
 }
 
+interface Order {
+  _id: string;
+  id: string;
+  customer: string;
+  total: number;
+  status: string;
+  type: string; // "Online" | "Offline"
+  items: string;
+  createdAt: string;
+}
+
 interface AdminContextType {
   products: Product[];
-  updateProduct: (id: number, newData: { price?: number; stock?: number }) => void;
-  orders: any[];
-  donationBalance: number;
-  donors: any[];
+  orders: Order[];
   reservations: any[];
-  updateStatus: (id: string, newStatus: string) => void;
-  addDonation: (amount: number, donorName: string) => void;
-  updateReservationStatus: (id: string, newStatus: string) => void;
+  donationBalance: number;
+  isLoading: boolean;
+  
+  // Actions
+  refreshData: () => Promise<void>; // Fungsi PENTING untuk refresh manual
+  updateProduct: (id: number | string, newData: { price?: number; stock?: number }) => void;
 }
 
 const AdminContext = createContext<AdminContextType | undefined>(undefined);
 
 export function AdminProvider({ children }: { children: React.ReactNode }) {
+  // --- STATE DATA ---
   const [products, setProducts] = useState<Product[]>([]);
-  const [orders, setOrders] = useState([]);
-  const [donationBalance, setDonationBalance] = useState(12450000); // Nilai default 3.AM Care
-  const [donors, setDonors] = useState([]);
+  const [orders, setOrders] = useState<Order[]>([]);
   const [reservations, setReservations] = useState([]);
+  const [donationBalance, setDonationBalance] = useState(0);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // --- AUTO-FETCH DARI MONGODB ---
-  // Mengambil 24 data produk yang sudah di-seed ke database
-  useEffect(() => {
-    const loadProducts = async () => {
-      try {
-        const res = await fetch("/api/products");
-        const data = await res.json();
-        if (Array.isArray(data)) {
-          setProducts(data);
-        }
-      } catch (err) {
-        console.error("Gagal memuat data dari database");
-      }
-    };
-    loadProducts();
+  // --- FUNGSI FETCH SEMUA DATA (CENTRALIZED) ---
+  const fetchAllData = useCallback(async () => {
+    // Jangan set isLoading(true) disini agar tidak flickering saat auto-refresh background
+    try {
+      // 1. Fetch Produk
+      const resProducts = await fetch("/api/products");
+      const dataProducts = await resProducts.json();
+      if (Array.isArray(dataProducts)) setProducts(dataProducts);
+
+      // 2. Fetch Orders (Online + Offline)
+      const resOrders = await fetch("/api/orders");
+      const dataOrders = await resOrders.json();
+      if (Array.isArray(dataOrders)) setOrders(dataOrders);
+
+      // 3. Fetch Donasi
+      const resDonasi = await fetch("/api/donate");
+      const dataDonasi = await resDonasi.json();
+      setDonationBalance(dataDonasi.balance || 0);
+
+      // 4. Fetch Reservasi
+      const resReservasi = await fetch("/api/reservations");
+      const dataReservasi = await resReservasi.json();
+      if (Array.isArray(dataReservasi)) setReservations(dataReservasi);
+
+    } catch (err) {
+      console.error("Gagal sinkronisasi data AdminContext:", err);
+    }
   }, []);
 
-  // --- ACTIONS ---
-  
-  // Update Harga & Stok langsung ke MongoDB Atlas
-  const updateProduct = async (id: number, newData: { price?: number; stock?: number }) => {
-    // 1. Update UI secara lokal (Optimistic UI) agar Admin tidak lag
+  // --- INITIAL LOAD & AUTO REFRESH ---
+  useEffect(() => {
+    const init = async () => {
+      setIsLoading(true);
+      await fetchAllData();
+      setIsLoading(false);
+    };
+    init();
+
+    // Auto refresh setiap 30 detik agar data selalu sinkron
+    const interval = setInterval(() => {
+        fetchAllData();
+    }, 30000);
+
+    return () => clearInterval(interval);
+  }, [fetchAllData]);
+
+  // --- ACTION: REFRESH MANUAL ---
+  // Dipanggil oleh Kasir setelah transaksi sukses agar Dashboard langsung update
+  const refreshData = async () => {
+    await fetchAllData();
+  };
+
+  // --- ACTION: UPDATE PRODUK ---
+  const updateProduct = async (id: number | string, newData: { price?: number; stock?: number }) => {
+    // 1. Optimistic UI Update (Biar cepat di mata user)
     setProducts((prev) => 
-      prev.map((p) => (p.id === id ? { ...p, ...newData } : p))
+      prev.map((p) => {
+        // Cek kecocokan ID (bisa _id string atau id number)
+        const match = p._id === id || p.id === id;
+        return match ? { ...p, ...newData } : p;
+      })
     );
 
-    // 2. Kirim perubahan ke API PATCH /api/products
+    // 2. Kirim ke Database
     try {
-      const response = await fetch("/api/products", {
+      await fetch("/api/products", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, ...newData }), // Mengirim ID numerik sesuai MongoDB
+        body: JSON.stringify({ id, ...newData }),
       });
-
-      if (!response.ok) throw new Error("Gagal menyimpan ke DB");
-      
-      console.log(`Produk ID ${id} berhasil diperbarui di MongoDB`);
+      // Refresh data asli dari DB untuk memastikan konsistensi
+      refreshData(); 
     } catch (err) {
-      console.error("Gagal sinkronisasi ke MongoDB, pastikan IP sudah Whitelisted");
+      console.error("Gagal update produk ke database");
+      // Revert changes jika perlu (opsional, disini kita skip untuk simplifikasi)
     }
-  };
-
-  // Fungsi tambahan (Placeholders sesuai kodingan Anda)
-  const updateStatus = (id: string, newStatus: string) => {
-    console.log(`Update status order ${id} ke ${newStatus}`);
-  };
-
-  const addDonation = (amount: number, donorName: string) => {
-    setDonationBalance(prev => prev + amount);
-    console.log(`Donasi dari ${donorName} sebesar ${amount} diterima`);
-  };
-
-  const updateReservationStatus = (id: string, newStatus: string) => {
-    console.log(`Update reservasi ${id} ke ${newStatus}`);
   };
 
   return (
     <AdminContext.Provider 
       value={{ 
         products, 
-        updateProduct,
         orders, 
-        donationBalance, 
-        donors, 
         reservations,
-        updateStatus,
-        addDonation,
-        updateReservationStatus
+        donationBalance,
+        isLoading,
+        refreshData,
+        updateProduct
       }}
     >
       {children}
