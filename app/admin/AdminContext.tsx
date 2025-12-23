@@ -25,7 +25,6 @@ interface Order {
   createdAt: string;
 }
 
-// 👇👇👇 BAGIAN PENTING: JANGAN DIHAPUS 👇👇👇
 interface AdminContextType {
   products: Product[];
   orders: Order[];
@@ -33,19 +32,22 @@ interface AdminContextType {
   donationBalance: number;
   isLoading: boolean;
   
-  // Definisi Fungsi refreshData WAJIB ADA DISINI
+  // Definisi Fungsi
   refreshData: () => Promise<void>; 
-  
   updateProduct: (id: number | string, newData: { price?: number; stock?: number }) => void;
 }
-// 👆👆👆 PASTIKAN BAGIAN INI ADA 👆👆👆
 
 const AdminContext = createContext<AdminContextType | undefined>(undefined);
 
 export function AdminProvider({ children }: { children: React.ReactNode }) {
   const [products, setProducts] = useState<Product[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
-  const [reservations, setReservations] = useState([]);
+  
+  // --- PERBAIKAN DISINI ---
+  // Sebelumnya: useState([]) -> Error "never[]"
+  // Sekarang: useState<any[]>([]) -> AMAN ✅
+  const [reservations, setReservations] = useState<any[]>([]); 
+  
   const [donationBalance, setDonationBalance] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -66,6 +68,7 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
 
       const resReservasi = await fetch("/api/reservations");
       const dataReservasi = await resReservasi.json();
+      // Sekarang baris ini aman karena tipe datanya sudah any[]
       if (Array.isArray(dataReservasi)) setReservations(dataReservasi);
 
     } catch (err) {
@@ -122,7 +125,7 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
         reservations,
         donationBalance,
         isLoading,
-        refreshData, // <--- WAJIB DI-EXPORT DISINI
+        refreshData, 
         updateProduct
       }}
     >
