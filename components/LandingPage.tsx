@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link"; 
-import { Facebook, Instagram, Twitter, ArrowRight } from "lucide-react"; 
+import { Facebook, Instagram, Twitter, ArrowRight, Sparkles } from "lucide-react"; 
 
 // --- Data Dummy ---
 const signatureDrinks = [
@@ -56,14 +56,12 @@ export default function LandingPage() {
         .animate-glow {
           animation: pulse-glow 4s ease-in-out infinite;
         }
-        /* Hide scrollbar for Chrome, Safari and Opera */
         .no-scrollbar::-webkit-scrollbar {
           display: none;
         }
-        /* Hide scrollbar for IE, Edge and Firefox */
         .no-scrollbar {
-          -ms-overflow-style: none;  /* IE and Edge */
-          scrollbar-width: none;  /* Firefox */
+          -ms-overflow-style: none;
+          scrollbar-width: none;
         }
       `}</style>
 
@@ -74,7 +72,6 @@ export default function LandingPage() {
             <Image src="/Logo.png" alt="3AM Logo" width={100} height={100} className="w-14 h-14 md:w-24 md:h-24 object-contain" />
           </Link>
           
-          {/* NAVIGASI: Muncul di HP dengan scroll horizontal jika terlalu lebar */}
           <nav className="flex items-center gap-1 md:gap-2 text-[10px] md:text-base font-medium text-[#52392C] overflow-x-auto no-scrollbar whitespace-nowrap px-2">
             {navLinks.map((item) => (
               <Link 
@@ -88,11 +85,9 @@ export default function LandingPage() {
           </nav>
 
           <div className="flex items-center gap-1.5 md:gap-4 shrink-0">
-            {/* Tombol Order Online: Muncul di HP */}
             <Link href="/online" className="px-3 md:px-6 py-2 bg-[#361509] text-white text-[10px] md:text-sm font-bold rounded-lg hover:bg-[#2a1007] transition shadow-md text-center whitespace-nowrap">
               Order Online
             </Link>
-            {/* Tombol Reservation: Muncul di HP */}
             <Link href="/reservation" className="px-3 md:px-6 py-2 bg-transparent text-[#52392C] border border-[#52392C] text-[10px] md:text-sm font-bold rounded-full hover:bg-[#52392C] hover:text-white transition text-center whitespace-nowrap">
               Reservation
             </Link>
@@ -112,10 +107,20 @@ export default function LandingPage() {
             <h1 className="font-display font-bold text-5xl md:text-7xl text-[#2B1F18] leading-tight mb-8 tracking-tight drop-shadow-sm">
               FOR THE <br/>SLEEPLESS<br /><span className="text-[#6F4E37] italic">AND DREAMERS</span>
             </h1>
-            <Link href="/menu" className="px-8 py-3.5 bg-[#361509] text-white text-base md:text-lg font-bold rounded-lg hover:bg-[#2a1007] transition-all shadow-xl hover:-translate-y-1 flex items-center gap-2 group">
-                Order Ahead <ArrowRight className="group-hover:translate-x-1 transition-transform"/>
-            </Link>
+            
+            {/* WRAPPER TOMBOL */}
+            <div className="flex flex-col sm:flex-row gap-4">
+              <Link href="/menu" className="px-8 py-3.5 bg-[#361509] text-white text-base md:text-lg font-bold rounded-lg hover:bg-[#2a1007] transition-all shadow-xl hover:-translate-y-1 flex items-center gap-2 group">
+                  Order Ahead <ArrowRight className="group-hover:translate-x-1 transition-transform"/>
+              </Link>
+
+              {/* TOMBOL MOOD BARISTA ✨ */}
+              <Link href="/Bean-of-Hope" className="px-8 py-3.5 bg-[#361509] text-white text-base md:text-lg font-bold rounded-lg hover:bg-[#ae0c0c] transition-all shadow-xl hover:-translate-y-1 flex items-center gap-2 group border-2 border-[#361509]/10">
+                  Find Your Mood <Sparkles size={18} className="group-hover:rotate-12 transition-transform" />
+              </Link>
+            </div>
           </div>
+
           <div className="w-full md:w-1/2 flex justify-center md:justify-center relative mt-12 md:mt-0 z-30 md:-ml-16">
             <div className="absolute -top-32 -left-20 md:-top-40 md:-left-40 w-[500px] h-[500px] md:w-[850px] md:h-[850px] opacity-10 z-0 pointer-events-none">
               <Image src="/Logo.png" alt="Watermark" fill className="object-contain" />
@@ -146,14 +151,14 @@ export default function LandingPage() {
             {signatureDrinks.map((drink, idx) => (
               <Link href="/menu" key={idx} className="group relative h-[480px] w-full rounded-[2.5rem] overflow-hidden shadow-2xl bg-[#F6E6D0] block">
                 <div className="absolute inset-0 flex items-center justify-center p-6 transition-all duration-700 group-hover:scale-90 group-hover:opacity-40">
-                   <div className="relative w-full h-full">
-                     <Image 
+                    <div className="relative w-full h-full">
+                      <Image 
                         src={drink.img} 
                         alt={drink.name} 
                         fill 
                         className="object-contain drop-shadow-md transition-transform duration-700 group-hover:scale-110" 
-                     />
-                   </div>
+                      />
+                    </div>
                 </div>
                 <div className="absolute inset-0 bg-[#2E1C16]/85 backdrop-blur-[4px] opacity-0 group-hover:opacity-100 transition-all duration-500 flex flex-col items-center justify-center p-8 text-center z-20">
                    <h3 className="font-display font-bold text-3xl text-white drop-shadow-md mb-4 translate-y-6 group-hover:translate-y-0 transition-all duration-500 delay-100">{drink.name}</h3>
